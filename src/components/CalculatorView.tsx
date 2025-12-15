@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { RotateCcw, Calculator, DollarSign, Check, Package, CalendarIcon, FileText, CheckCircle2, User } from "lucide-react";
+import { RotateCcw, Calculator, DollarSign, Check, Package, CalendarIcon, FileText, CheckCircle2, User, Save, CloudOff } from "lucide-react";
 import { EditRestPercentageDialog } from "@/components/EditRestPercentageDialog";
 import { BreakdownTable } from "@/components/BreakdownTable";
 import { ProductManager } from "@/components/ProductManager";
 import { ProductCatalogDialog } from "@/components/ProductCatalogDialog";
 import { ClientSelector } from "@/components/ClientSelector";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
+import { InvoicePreviewDialog } from "@/components/InvoicePreviewDialog";
 import { formatNumber, formatCurrency } from "@/lib/formatters";
 import { format, formatDistanceToNow, isToday, isYesterday } from "date-fns";
 import { es } from 'date-fns/locale';
@@ -107,9 +108,14 @@ export const CalculatorView = ({
   const [step1Complete, setStep1Complete] = useState(false);
   const [step2Complete, setStep2Complete] = useState(false);
   const [showSaveAnimation, setShowSaveAnimation] = useState(false);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const toastShownRef = useRef(false);
 
   const ncfPrefix = 'B010000';
+  
+  // Detect if there's unsaved draft work
+  const hasDraft = step1Complete || step2Complete || totalInvoice > 0;
 
   useEffect(() => {
     if (suggestedNcf !== null && suggestedNcf !== undefined) {
@@ -213,10 +219,17 @@ export const CalculatorView = ({
     if (selectedClient) setStep2Complete(true);
   };
 
-  const handleSaveInvoice = async () => {
+  const handleOpenPreview = () => {
+    setShowPreviewDialog(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setIsSaving(true);
+    setShowPreviewDialog(false);
     setShowSaveAnimation(true);
     const fullNcf = `${ncfPrefix}${ncfSuffix.padStart(4, '0')}`;
     await onSaveInvoice(fullNcf, format(invoiceDate, 'yyyy-MM-dd'), selectedClient?.id);
+    setIsSaving(false);
   };
 
   const handleAnimationComplete = useCallback(() => {
@@ -237,16 +250,26 @@ export const CalculatorView = ({
       <div className={`grid gap-6 ${showBreakdown ? 'lg:grid-cols-2' : 'max-w-xl mx-auto'}`}>
         <Card className="overflow-hidden card-shadow hover-lift">
           <div className="gradient-primary px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-lg bg-primary-foreground/20 flex items-center justify-center">
-                <Calculator className="h-5 w-5 text-primary-foreground" />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary-foreground/20 flex items-center justify-center">
+                  <Calculator className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h1 className="text-lg font-semibold text-primary-foreground">Calculadora</h1>
+                  <p className="text-primary-foreground/70 text-sm">
+                    {activeSeller ? `Comisiones de ${activeSeller.name}` : 'Calcula tu ganancia'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h1 className="text-lg font-semibold text-primary-foreground">Calculadora</h1>
-                <p className="text-primary-foreground/70 text-sm">
-                  {activeSeller ? `Comisiones de ${activeSeller.name}` : 'Calcula tu ganancia'}
-                </p>
-              </div>
+              
+              {/* Draft Indicator */}
+              {hasDraft && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary-foreground/20 animate-pulse">
+                  <Save className="h-3.5 w-3.5 text-primary-foreground" />
+                  <span className="text-xs font-medium text-primary-foreground">Borrador</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -477,14 +500,33 @@ export const CalculatorView = ({
               <Button 
                 className="flex-1 gap-2 h-12 text-base gradient-primary" 
                 disabled={totalInvoice === 0} 
-                onClick={handleSaveInvoice}
+                onClick={handleOpenPreview}
               >
-                <FileText className="h-5 w-5" /> Guardar Factura
+                <FileText className="h-5 w-5" /> Vista Previa
               </Button>
               <Button variant="outline" onClick={handleReset} className="gap-2 h-11 flex-1">
                 <RotateCcw className="h-4 w-4" /> Limpiar
               </Button>
             </div>
+            
+            {/* Invoice Preview Dialog */}
+            <InvoicePreviewDialog
+              open={showPreviewDialog}
+              onOpenChange={setShowPreviewDialog}
+              onConfirm={handleConfirmSave}
+              loading={isSaving}
+              data={{
+                ncf: fullNcf,
+                invoiceDate: invoiceDate,
+                clientName: selectedClient?.name || null,
+                totalAmount: totalInvoice,
+                breakdown: calculations.breakdown,
+                restAmount: calculations.restAmount,
+                restPercentage: restPercentage,
+                restCommission: calculations.restCommission,
+                totalCommission: calculations.totalCommission,
+              }}
+            />
           </div>
         )}
       </div>
