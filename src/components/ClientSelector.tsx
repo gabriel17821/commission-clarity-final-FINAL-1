@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Search, UserPlus, X, Check, User, Phone, Mail, Trash2 } from 'lucide-react';
 import { Client } from '@/hooks/useClients';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { createPortal } from 'react-dom';
 
 interface ClientSelectorProps {
   clients: Client[];
@@ -30,12 +31,25 @@ export const ClientSelector = ({
   const [newEmail, setNewEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const filteredClients = clients.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Update dropdown position
+  useEffect(() => {
+    if (showSuggestions && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect();
+      setDropdownPosition({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
+  }, [showSuggestions, search]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -64,7 +78,13 @@ export const ClientSelector = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!shouldShowDropdown) return;
+    if (!shouldShowDropdown) {
+      if (e.key === 'Enter' && search.trim()) {
+        e.preventDefault();
+        handleQuickAdd();
+      }
+      return;
+    }
 
     const totalItems = filteredClients.length + 1; // +1 for "create new" option
 
@@ -82,7 +102,8 @@ export const ClientSelector = ({
         if (highlightedIndex >= 0 && highlightedIndex < filteredClients.length) {
           handleSelectClient(filteredClients[highlightedIndex]);
         } else if (highlightedIndex === filteredClients.length || (filteredClients.length === 0 && search.trim())) {
-          // Create new client option
+          handleQuickAdd();
+        } else if (search.trim()) {
           handleQuickAdd();
         }
         break;
@@ -128,6 +149,99 @@ export const ClientSelector = ({
       await onDeleteClient(clientId);
     }
   };
+
+  // Dropdown content rendered via portal
+  const dropdownContent = shouldShowDropdown ? createPortal(
+    <div 
+      className="fixed bg-popover border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95"
+      style={{ 
+        top: dropdownPosition.top,
+        left: dropdownPosition.left,
+        width: dropdownPosition.width,
+        zIndex: 99999,
+      }}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      {filteredClients.length > 0 ? (
+        <div className="max-h-48 overflow-y-auto">
+          {filteredClients.map((client, index) => (
+            <div
+              key={client.id}
+              className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 cursor-pointer group ${
+                highlightedIndex === index ? 'bg-primary/10' : 'hover:bg-muted/60'
+              }`}
+              onClick={() => handleSelectClient(client)}
+            >
+              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                <User className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-foreground text-sm truncate">{client.name}</p>
+                {client.phone && (
+                  <p className="text-xs text-muted-foreground">{client.phone}</p>
+                )}
+              </div>
+              {onDeleteClient && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent style={{ zIndex: 100000 }}>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Esta acción eliminará el cliente "{client.name}" permanentemente.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction 
+                        onClick={(e) => handleDeleteClient(e, client.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="p-4 text-center text-muted-foreground text-sm">
+          No se encontraron clientes
+        </div>
+      )}
+
+      <button 
+        className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 border-t border-border text-primary ${
+          highlightedIndex === filteredClients.length ? 'bg-primary/10' : 'hover:bg-primary/5'
+        }`}
+        onClick={() => {
+          setNewName(search.trim());
+          setDialogOpen(true);
+          setShowSuggestions(false);
+        }}
+      >
+        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+          <UserPlus className="h-4 w-4 text-primary" />
+        </div>
+        <span className="font-medium text-sm">
+          {search.trim() ? `Crear "${search}"` : 'Crear nuevo cliente'}
+        </span>
+        <span className="ml-auto text-xs text-muted-foreground">Enter</span>
+      </button>
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div className="space-y-3">
@@ -175,159 +289,80 @@ export const ClientSelector = ({
             />
           </div>
 
-          {shouldShowDropdown && (
-            <div 
-              className="absolute w-full mt-1 bg-popover border border-border rounded-xl shadow-xl overflow-hidden animate-in fade-in-0 zoom-in-95"
-              style={{ zIndex: 9999 }}
-            >
-              {filteredClients.length > 0 ? (
-                <div className="max-h-48 overflow-y-auto">
-                  {filteredClients.map((client, index) => (
-                    <div
-                      key={client.id}
-                      className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 cursor-pointer group ${
-                        highlightedIndex === index ? 'bg-primary/10' : 'hover:bg-muted/60'
-                      }`}
-                      onClick={() => handleSelectClient(client)}
-                    >
-                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
-                        <User className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-foreground text-sm truncate">{client.name}</p>
-                        {client.phone && (
-                          <p className="text-xs text-muted-foreground">{client.phone}</p>
-                        )}
-                      </div>
-                      {onDeleteClient && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Esta acción eliminará el cliente "{client.name}" permanentemente.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction 
-                                onClick={(e) => handleDeleteClient(e, client.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Eliminar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="p-4 text-center text-muted-foreground text-sm">
-                  No se encontraron clientes
-                </div>
-              )}
-
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-                <DialogTrigger asChild>
-                  <button 
-                    className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 border-t border-border text-primary ${
-                      highlightedIndex === filteredClients.length ? 'bg-primary/10' : 'hover:bg-primary/5'
-                    }`}
-                    onClick={() => setNewName(search.trim())}
-                  >
-                    <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                      <UserPlus className="h-4 w-4 text-primary" />
-                    </div>
-                    <span className="font-medium text-sm">
-                      {search.trim() ? `Crear "${search}"` : 'Crear nuevo cliente'}
-                    </span>
-                    <span className="ml-auto text-xs text-muted-foreground">Enter</span>
-                  </button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md" style={{ zIndex: 10000 }}>
-                  <DialogHeader>
-                    <DialogTitle>Nuevo Cliente</DialogTitle>
-                  </DialogHeader>
-                  <form onSubmit={handleAddNewClient} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="client-name">Nombre *</Label>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="client-name"
-                          value={newName}
-                          onChange={(e) => setNewName(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' && newName.trim()) {
-                              handleAddNewClient(e);
-                            }
-                          }}
-                          placeholder="Nombre del cliente"
-                          className="pl-9"
-                          required
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="client-phone">Teléfono</Label>
-                      <div className="relative">
-                        <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="client-phone"
-                          value={newPhone}
-                          onChange={(e) => setNewPhone(e.target.value)}
-                          placeholder="809-000-0000"
-                          className="pl-9"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="client-email">Email</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="client-email"
-                          type="email"
-                          value={newEmail}
-                          onChange={(e) => setNewEmail(e.target.value)}
-                          placeholder="cliente@email.com"
-                          className="pl-9"
-                        />
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2 pt-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setDialogOpen(false)}
-                      >
-                        Cancelar
-                      </Button>
-                      <Button type="submit" disabled={loading || !newName.trim()} className="gap-2">
-                        <Check className="h-4 w-4" />
-                        {loading ? 'Creando...' : 'Crear Cliente'}
-                      </Button>
-                    </div>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
+          {dropdownContent}
         </div>
       )}
+
+      {/* Dialog for creating new client with full form */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md" style={{ zIndex: 100000 }}>
+          <DialogHeader>
+            <DialogTitle>Nuevo Cliente</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleAddNewClient} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="client-name">Nombre *</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="client-name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newName.trim()) {
+                      handleAddNewClient(e);
+                    }
+                  }}
+                  placeholder="Nombre del cliente"
+                  className="pl-9"
+                  required
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-phone">Teléfono</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="client-phone"
+                  value={newPhone}
+                  onChange={(e) => setNewPhone(e.target.value)}
+                  placeholder="809-000-0000"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="client-email">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="client-email"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="cliente@email.com"
+                  className="pl-9"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setDialogOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={loading || !newName.trim()} className="gap-2">
+                <Check className="h-4 w-4" />
+                {loading ? 'Creando...' : 'Crear Cliente'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
