@@ -41,6 +41,7 @@ interface InvoiceHistoryProps {
 
 export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, clients, products }: InvoiceHistoryProps) => {
   const [selectedMonth, setSelectedMonth] = useState<string>('all');
+  const [selectedClientId, setSelectedClientId] = useState<string>('all');
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
 
   const getClientName = (clientId?: string | null) => {
@@ -58,17 +59,33 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
     return Array.from(uniqueMonths).sort().reverse();
   }, [invoices]);
 
+  // Get clients that have invoices
+  const clientsWithInvoices = useMemo(() => {
+    const clientIds = new Set(invoices.map(inv => (inv as any).client_id).filter(Boolean));
+    return clients.filter(c => clientIds.has(c.id));
+  }, [invoices, clients]);
+
   const filteredInvoices = useMemo(() => {
-    if (selectedMonth === 'all') return invoices;
+    let filtered = invoices;
     
-    const [year, month] = selectedMonth.split('-').map(Number);
-    const start = startOfMonth(new Date(year, month - 1));
-    const end = endOfMonth(new Date(year, month - 1));
+    // Filter by month
+    if (selectedMonth !== 'all') {
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const start = startOfMonth(new Date(year, month - 1));
+      const end = endOfMonth(new Date(year, month - 1));
+      
+      filtered = filtered.filter(inv => 
+        isWithinInterval(parseDateSafe(inv.invoice_date || inv.created_at), { start, end })
+      );
+    }
     
-    return invoices.filter(inv => 
-      isWithinInterval(parseDateSafe(inv.invoice_date || inv.created_at), { start, end })
-    );
-  }, [invoices, selectedMonth]);
+    // Filter by client
+    if (selectedClientId !== 'all') {
+      filtered = filtered.filter(inv => (inv as any).client_id === selectedClientId);
+    }
+    
+    return filtered;
+  }, [invoices, selectedMonth, selectedClientId]);
 
   const totalStats = useMemo(() => {
     return {
@@ -206,14 +223,14 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
         {/* Controls */}
         <Card className="p-4 bg-card border-border hover-lift">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-52 bg-background border-border">
+                <SelectTrigger className="w-48 bg-background border-border">
                   <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
                   <SelectValue placeholder="Filtrar por mes" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todas las facturas</SelectItem>
+                  <SelectItem value="all">Todos los meses</SelectItem>
                   {months.map(month => {
                     const label = format(new Date(month + '-01'), 'MMMM yyyy', { locale: es });
                     return (
@@ -224,6 +241,35 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                   })}
                 </SelectContent>
               </Select>
+
+              <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                <SelectTrigger className="w-48 bg-background border-border">
+                  <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                  <SelectValue placeholder="Filtrar por cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los clientes</SelectItem>
+                  {clientsWithInvoices.map(client => (
+                    <SelectItem key={client.id} value={client.id}>
+                      {client.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              
+              {(selectedMonth !== 'all' || selectedClientId !== 'all') && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedMonth('all');
+                    setSelectedClientId('all');
+                  }}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  Limpiar filtros
+                </Button>
+              )}
             </div>
           </div>
         </Card>
