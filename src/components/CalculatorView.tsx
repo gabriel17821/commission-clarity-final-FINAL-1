@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Calculator, FileText, CalendarIcon, Package, Trash2, Save, User, Hash, DollarSign } from "lucide-react";
+import { Package, Trash2, Save, User, Hash, DollarSign, CalendarIcon } from "lucide-react";
 import { ProductManager } from "@/components/ProductManager";
 import { ClientSelector } from "@/components/ClientSelector";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
@@ -43,6 +43,20 @@ export const CalculatorView = ({
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [showSaveAnimation, setShowSaveAnimation] = useState(false);
+  
+  // Referencia para evitar resetear en el primer render si ya hay datos
+  const isFirstRender = useRef(true);
+
+  // FIX: Resetear formulario cuando cambia el vendedor activo (excepto la primera vez si queremos mantener default)
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    // Si cambia el vendedor, reiniciamos todo para evitar mezcla de datos
+    handleReset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSeller?.id]);
 
   useEffect(() => { if (suggestedNcf) setNcfSuffix(String(suggestedNcf).padStart(4, '0')); }, [suggestedNcf]);
 
@@ -70,44 +84,67 @@ export const CalculatorView = ({
   const isFormValid = totalInvoice > 0 && ncfSuffix.length === 4 && selectedClient;
 
   return (
-    <div className="container max-w-6xl mx-auto py-8 space-y-8 animate-in fade-in duration-500">
+    <div className="container max-w-[1400px] mx-auto py-4 space-y-4 animate-in fade-in duration-500">
       <SaveSuccessAnimation 
         show={showSaveAnimation} 
         onComplete={() => { setShowSaveAnimation(false); handleReset(); }} 
       />
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+      {/* Header Compacto */}
+      <div className="flex flex-row justify-between items-center gap-4 px-2">
         <div>
-          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Calculadora</h2>
-          <p className="text-muted-foreground font-medium">Gestiona las comisiones y desglose de facturas.</p>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">Calculadora</h2>
         </div>
-        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-5 py-2.5 rounded-full border shadow-sm">
-          <div className="h-8 w-8 rounded-full gradient-primary flex items-center justify-center text-white font-bold text-xs shadow-md">
-            {activeSeller?.name?.charAt(0) || <User size={14} />}
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-4 py-1.5 rounded-full border shadow-sm">
+          <div className="h-6 w-6 rounded-full bg-primary flex items-center justify-center text-white font-bold text-xs shadow-md">
+            {activeSeller?.name?.charAt(0) || <User size={12} />}
           </div>
           <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{activeSeller?.name}</span>
         </div>
       </div>
 
-      <Card className="border-none shadow-xl bg-white dark:bg-slate-950 rounded-[2rem]">
-        <CardContent className="p-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <Card className="border-none shadow-xl bg-white dark:bg-slate-950 rounded-[1.5rem] overflow-visible">
+        <CardContent className="p-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* --- COLUMNA IZQUIERDA: INPUTS --- */}
-            <div className="lg:col-span-7 space-y-8">
+            {/* --- COLUMNA IZQUIERDA: DATOS GENERALES (Más compacta 4 columnas) --- */}
+            <div className="lg:col-span-4 flex flex-col gap-6">
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <CalendarIcon className="h-3 w-3 text-primary" /> Fecha Factura
+              {/* Bloque Subtotal (Primero para jerarquía visual) */}
+              <div className="space-y-2 bg-slate-50/80 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                <Label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between">
+                  <span className="flex items-center gap-2"><DollarSign className="h-3 w-3 text-primary"/> Total Factura</span>
+                  <span className="text-[9px] bg-white border px-1.5 py-0.5 rounded text-slate-400">SIN ITBIS</span>
+                </Label>
+                <div className="relative group">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
+                  <Input 
+                    value={displayValue} 
+                    onChange={e=>{
+                      const f = formatInputNumber(e.target.value);
+                      setDisplayValue(f);
+                      setTotalInvoice(parseFormattedNumber(f));
+                    }}
+                    className="h-14 pl-8 text-3xl font-black border-slate-200 dark:border-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl bg-white tracking-tight" 
+                    placeholder="0.00" 
+                  />
+                </div>
+              </div>
+
+              {/* Fecha y NCF en una fila apretada */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    Fecha
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className={cn(
-                        "w-full justify-start text-left font-bold h-12 rounded-xl border-slate-200 hover:bg-slate-50 transition-all",
+                        "w-full justify-start text-left font-bold h-10 rounded-xl border-slate-200 text-sm px-3",
                         !invoiceDate && "text-muted-foreground"
                       )}>
-                        {format(invoiceDate, 'PPP', { locale: es })}
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-primary" />
+                        {format(invoiceDate, 'dd/MM/yyyy')}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0 rounded-xl shadow-xl border-none" align="start">
@@ -116,25 +153,26 @@ export const CalculatorView = ({
                   </Popover>
                 </div>
 
-                <div className="space-y-2">
-                  <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                    <Hash className="h-3 w-3 text-primary" /> NCF (4 Finales)
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    NCF (4 Finales)
                   </Label>
-                  <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 h-12 px-4 focus-within:ring-2 ring-primary/20 transition-all">
-                    <span className="text-xs font-mono font-black text-slate-400 mr-2 border-r pr-3 py-1">B010000</span>
+                  <div className="flex items-center bg-white rounded-xl border border-slate-200 h-10 px-3 focus-within:ring-2 ring-primary/20 transition-all">
+                    <span className="text-[10px] font-mono font-bold text-slate-400 mr-2 border-r pr-2 py-0.5">B01</span>
                     <Input 
                       value={ncfSuffix} 
                       onChange={e=>setNcfSuffix(e.target.value.replace(/\D/g,'').slice(0,4))} 
-                      className="border-0 focus-visible:ring-0 font-mono font-bold text-lg h-full bg-transparent p-0 tracking-widest" 
+                      className="border-0 focus-visible:ring-0 font-mono font-bold text-base h-full bg-transparent p-0 tracking-widest w-full" 
                       placeholder="0000" 
                     />
                   </div>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-                  <User className="h-3 w-3 text-primary" /> Cliente
+              {/* Selector de Cliente */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                   Cliente
                 </Label>
                 <ClientSelector 
                   clients={clients} 
@@ -144,35 +182,25 @@ export const CalculatorView = ({
                 />
               </div>
 
-              <Separator className="bg-slate-100" />
-
-              <div className="space-y-3">
-                <Label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
-                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary"/> Subtotal de la factura</span>
-                  <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black uppercase">Antes de ITBIS</span>
-                </Label>
-                <div className="relative group">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
-                  <Input 
-                    value={displayValue} 
-                    onChange={e=>{
-                      const f = formatInputNumber(e.target.value);
-                      setDisplayValue(f);
-                      setTotalInvoice(parseFormattedNumber(f));
-                    }}
-                    className="h-20 pl-12 text-5xl font-black border-2 border-slate-100 dark:border-slate-800 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all rounded-2xl bg-slate-50/50 tracking-tight" 
-                    placeholder="0.00" 
-                  />
-                </div>
+              {/* Botón Guardar Mobile (Visible solo en pantallas pequeñas) */}
+              <div className="lg:hidden pt-4">
+                 <Button 
+                  disabled={!isFormValid}
+                  onClick={()=>setShowPreviewDialog(true)}
+                  className="w-full h-12 text-base font-bold shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 rounded-xl"
+                >
+                  <Save className="mr-2 h-4 w-4" /> Guardar Factura
+                </Button>
               </div>
+
             </div>
 
-            {/* --- COLUMNA DERECHA --- */}
-            <div className="lg:col-span-5 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-slate-100 p-6">
-              <div className="flex-1 space-y-6">
-                <div className="flex items-center justify-between mb-2">
-                   <h3 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                      <Package className="h-4 w-4 text-primary" /> Productos
+            {/* --- COLUMNA DERECHA: PRODUCTOS (Más ancha 8 columnas) --- */}
+            <div className="lg:col-span-8 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/20 rounded-2xl border border-slate-100 p-5">
+              <div className="flex-1 space-y-4">
+                <div className="flex items-center justify-between mb-1">
+                   <h3 className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                      <Package className="h-4 w-4" /> Desglose de Productos
                    </h3>
                    <ProductCatalogDialog 
                       products={products} 
@@ -182,7 +210,7 @@ export const CalculatorView = ({
                    />
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2">
                    <ProductManager 
                       products={products} 
                       activeProductIds={activeProductIds} 
@@ -196,55 +224,54 @@ export const CalculatorView = ({
 
                 <Separator className="bg-slate-200" />
 
-                <div className="flex items-center justify-between py-2">
-                  <div className="flex items-center gap-3">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Resto ({restPercentage}%)</span>
-                      <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
+                {/* Área de Totales Compacta Horizontal */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end pt-2">
+                    
+                    {/* Resto */}
+                    <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Resto ({restPercentage}%)</span>
+                            <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
+                        </div>
+                        <span className="text-xl font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                            ${formatNumber(calculations.restAmount)}
+                        </span>
                     </div>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-lg font-bold text-slate-700 dark:text-slate-200 tabular-nums">
-                      ${formatNumber(calculations.restAmount)}
-                    </span>
-                  </div>
+
+                    {/* Comisión Total y Botones */}
+                    <div className="flex items-center gap-3">
+                        <div className="flex-1 bg-primary/5 dark:bg-primary/10 p-3 rounded-xl border border-primary/10 flex flex-col justify-center">
+                            <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-0.5">Comisión Total</p>
+                            <p className="text-2xl font-black text-primary tracking-tight tabular-nums">
+                                ${formatCurrency(calculations.totalCommission)}
+                            </p>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                             <Button 
+                                variant="outline" 
+                                size="icon"
+                                onClick={handleReset} 
+                                className="h-10 w-10 text-slate-400 hover:text-destructive hover:bg-destructive/10 rounded-xl border-slate-200"
+                                title="Limpiar formulario"
+                            >
+                                <Trash2 size={18} />
+                            </Button>
+                            <Button 
+                                disabled={!isFormValid}
+                                onClick={()=>setShowPreviewDialog(true)}
+                                className="h-10 px-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-xl font-bold"
+                            >
+                                <Save className="h-4 w-4 mr-2" />
+                                Guardar
+                            </Button>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-100 shadow-sm mt-4">
-                   <div className="flex justify-between items-end">
-                      <div>
-                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Comisión Total</p>
-                         <p className="text-3xl font-black text-primary tracking-tight tabular-nums">
-                           ${formatCurrency(calculations.totalCommission)}
-                         </p>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        onClick={handleReset} 
-                        className="text-slate-300 hover:text-destructive hover:bg-destructive/10 rounded-full h-8 w-8"
-                      >
-                        <Trash2 size={16} />
-                      </Button>
-                   </div>
-                </div>
-              </div>
-
-              <div className="mt-6">
-                <Button 
-                  disabled={!isFormValid}
-                  onClick={()=>setShowPreviewDialog(true)}
-                  className="w-full h-14 text-lg font-black shadow-lg shadow-primary/20 transition-all gradient-primary rounded-xl hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Save className="mr-2 h-5 w-5" /> Revisar y Guardar
-                </Button>
-                {!isFormValid && (
-                  <p className="text-center text-[10px] text-muted-foreground font-bold uppercase mt-3 animate-pulse">
-                    Faltan datos requeridos
-                  </p>
-                )}
               </div>
             </div>
+
           </div>
         </CardContent>
       </Card>
