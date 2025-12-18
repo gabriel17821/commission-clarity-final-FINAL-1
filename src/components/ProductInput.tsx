@@ -20,6 +20,9 @@ export const ProductInput = ({ label, value, onChange, percentage, color, onDele
 
   useEffect(() => {
     if (value === 0 && displayValue !== "") setDisplayValue("");
+    else if (value > 0 && parseFormattedNumber(displayValue) !== value) {
+        setDisplayValue(formatInputNumber(value.toString()));
+    }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -31,34 +34,34 @@ export const ProductInput = ({ label, value, onChange, percentage, color, onDele
   const commission = value * (percentage / 100);
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border-2 border-border bg-card p-5 transition-all hover:border-primary/30 animate-slide-up">
-      <div className="absolute left-0 top-0 h-full w-1.5" style={{ backgroundColor: color }} />
-      <div className="flex items-center justify-between gap-6">
+    <div className="group relative overflow-hidden rounded-xl border border-border bg-card p-4 transition-all hover:shadow-md animate-slide-up">
+      <div className="absolute left-0 top-0 h-full w-1" style={{ backgroundColor: color }} />
+      <div className="flex items-center justify-between gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <Label className="text-base font-bold text-foreground truncate">{label}</Label>
+            <Label className="text-sm font-bold text-foreground truncate">{label}</Label>
             {canDelete && (
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10" onClick={onDelete}>
-                <Trash2 className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={onDelete}>
+                <Trash2 className="h-3 w-3" />
               </Button>
             )}
           </div>
-          <p className="text-xs font-black text-muted-foreground uppercase mt-1 tracking-widest">{percentage}% COMISIÓN</p>
+          <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{percentage}% COMISIÓN</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="relative w-40">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-lg font-bold text-muted-foreground">$</span>
+        <div className="flex flex-col items-end gap-1">
+          <div className="relative w-36">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-muted-foreground">$</span>
             <Input
               type="text"
               inputMode="decimal"
               value={displayValue}
               onChange={handleChange}
-              className="h-11 pl-8 text-right font-black text-lg border-2 focus-visible:ring-primary/20"
+              className="h-9 pl-7 text-right font-bold text-sm border-2 focus-visible:ring-primary/20"
               placeholder="0.00"
             />
           </div>
           {value > 0 && (
-            <span className="text-sm font-black text-success flex items-center gap-1">
+            <span className="text-xs font-bold text-success">
               + ${formatCurrency(commission)}
             </span>
           )}
