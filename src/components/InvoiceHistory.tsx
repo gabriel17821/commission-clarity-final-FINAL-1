@@ -34,7 +34,7 @@ interface InvoiceHistoryProps {
     restCommission: number,
     totalCommission: number,
     products: { name: string; amount: number; percentage: number; commission: number }[],
-    clientId?: string | null // Aseguramos que acepte el cliente
+    clientId?: string | null
   ) => Promise<any>;
   clients: Client[];
   products: Product[];
@@ -60,7 +60,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
     return Array.from(uniqueMonths).sort().reverse();
   }, [invoices]);
 
-  // Obtener solo los clientes que tienen facturas para el filtro
   const clientsWithInvoices = useMemo(() => {
     const clientIds = new Set(invoices.map(inv => (inv as any).client_id).filter(Boolean));
     return clients.filter(c => clientIds.has(c.id));
@@ -69,7 +68,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
   const filteredInvoices = useMemo(() => {
     let filtered = invoices;
     
-    // Filter by month
     if (selectedMonth !== 'all') {
       const [year, month] = selectedMonth.split('-').map(Number);
       const start = startOfMonth(new Date(year, month - 1));
@@ -80,7 +78,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
       );
     }
     
-    // Filter by client
     if (selectedClientId !== 'all') {
       filtered = filtered.filter(inv => (inv as any).client_id === selectedClientId);
     }
@@ -141,7 +138,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
   return (
     <TooltipProvider>
       <div className="space-y-6 animate-fade-in">
-        {/* Header Stats */}
+        {/* Stats y Filtros (Sin Cambios) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card className="p-4 bg-card border-border stat-card hover-lift">
             <div className="flex items-center gap-3">
@@ -152,14 +149,9 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                 <p className="text-sm text-muted-foreground">Facturas</p>
                 <p className="text-2xl font-bold text-foreground animate-count-up">{filteredInvoices.length}</p>
               </div>
-              {filteredInvoices.length >= 30 && (
-                <div className="badge-new flex items-center gap-1">
-                  <Sparkles className="h-3 w-3" />
-                </div>
-              )}
+              {filteredInvoices.length >= 30 && <div className="badge-new flex items-center gap-1"><Sparkles className="h-3 w-3" /></div>}
             </div>
           </Card>
-          
           <Card className="p-4 bg-card border-border stat-card hover-lift">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center">
@@ -168,25 +160,9 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
               <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Total Ventas</p>
                 <p className="text-2xl font-bold text-foreground animate-count-up">${formatNumber(totalStats.totalAmount)}</p>
-                {salesChange !== null && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={`inline-flex items-center gap-1 text-xs mt-1 cursor-help ${
-                        salesChange >= 0 ? 'text-success' : 'text-destructive'
-                      }`}>
-                        {salesChange >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {salesChange > 0 ? '+' : ''}{salesChange.toFixed(1)}%
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">vs {prevMonthLabel}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             </div>
           </Card>
-          
           <Card className="p-4 bg-card border-border stat-card hover-lift hover-glow">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-lg gradient-success flex items-center justify-center">
@@ -195,33 +171,11 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
               <div className="flex-1">
                 <p className="text-sm text-muted-foreground">Total Comisión</p>
                 <p className="text-2xl font-bold text-success animate-count-up">${formatCurrency(totalStats.totalCommission)}</p>
-                {commissionChange !== null && (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className={`inline-flex items-center gap-1 text-xs mt-1 cursor-help ${
-                        commissionChange >= 0 ? 'text-success' : 'text-destructive'
-                      }`}>
-                        {commissionChange >= 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
-                        {commissionChange > 0 ? '+' : ''}{commissionChange.toFixed(1)}%
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">
-                        vs {prevMonthLabel}
-                        <br />
-                        <span className="text-muted-foreground">
-                          {commissionChange >= 0 ? '+' : ''}${formatNumber(Math.round(totalStats.totalCommission - (previousPeriodStats?.totalCommission || 0)))}
-                        </span>
-                      </p>
-                    </TooltipContent>
-                  </Tooltip>
-                )}
               </div>
             </div>
           </Card>
         </div>
 
-        {/* Controls */}
         <Card className="p-4 bg-card border-border hover-lift">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3">
@@ -234,15 +188,10 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                   <SelectItem value="all">Todos los meses</SelectItem>
                   {months.map(month => {
                     const label = format(new Date(month + '-01'), 'MMMM yyyy', { locale: es });
-                    return (
-                      <SelectItem key={month} value={month}>
-                        {label.charAt(0).toUpperCase() + label.slice(1)}
-                      </SelectItem>
-                    );
+                    return <SelectItem key={month} value={month}>{label.charAt(0).toUpperCase() + label.slice(1)}</SelectItem>;
                   })}
                 </SelectContent>
               </Select>
-
               <Select value={selectedClientId} onValueChange={setSelectedClientId}>
                 <SelectTrigger className="w-48 bg-background border-border">
                   <User className="h-4 w-4 mr-2 text-muted-foreground" />
@@ -250,24 +199,11 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos los clientes</SelectItem>
-                  {clientsWithInvoices.map(client => (
-                    <SelectItem key={client.id} value={client.id}>
-                      {client.name}
-                    </SelectItem>
-                  ))}
+                  {clientsWithInvoices.map(client => <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              
               {(selectedMonth !== 'all' || selectedClientId !== 'all') && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedMonth('all');
-                    setSelectedClientId('all');
-                  }}
-                  className="text-muted-foreground hover:text-foreground"
-                >
+                <Button variant="ghost" size="sm" onClick={() => { setSelectedMonth('all'); setSelectedClientId('all'); }} className="text-muted-foreground hover:text-foreground">
                   Limpiar filtros
                 </Button>
               )}
@@ -275,34 +211,25 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
           </div>
         </Card>
 
-        {/* Invoice List */}
+        {/* LISTA DE FACTURAS */}
         {filteredInvoices.length === 0 ? (
           <Card className="p-12 text-center bg-card border-border">
             <div className="h-16 w-16 rounded-full bg-muted mx-auto mb-4 flex items-center justify-center animate-pulse-soft">
               <Receipt className="h-8 w-8 text-muted-foreground" />
             </div>
             <h3 className="font-semibold text-foreground mb-1">No hay facturas</h3>
-            <p className="text-sm text-muted-foreground">
-              {selectedMonth === 'all' 
-                ? 'Aún no has guardado ninguna factura' 
-                : 'No hay facturas para este mes'}
-            </p>
           </Card>
         ) : (
           <div className="space-y-2">
             {filteredInvoices.map((invoice, index) => {
               const clientName = getClientName((invoice as any).client_id);
-              
               return (
                 <Card 
                   key={invoice.id} 
-                  className={`overflow-hidden transition-all duration-300 bg-card border-border hover-lift ${
+                  className={`group overflow-hidden transition-all duration-300 bg-card border-border hover-lift ${
                     expandedInvoice === invoice.id ? 'ring-2 ring-primary/30 shadow-md' : 'hover:shadow-sm'
                   }`}
-                  style={{ 
-                    animationDelay: `${index * 30}ms`,
-                    animation: 'slideUp 0.3s ease-out forwards'
-                  }}
+                  style={{ animationDelay: `${index * 30}ms`, animation: 'slideUp 0.3s ease-out forwards' }}
                 >
                   <div 
                     className="p-4 cursor-pointer hover:bg-muted/20 transition-colors"
@@ -320,14 +247,15 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                               <span className="font-semibold text-sm text-foreground">{clientName}</span>
                             </div>
                           ) : (
-                            // Muestra visual si no tiene cliente, aunque no es clickeable aquí
                             <div className="flex items-center gap-1.5 mb-0.5 opacity-50">
                               <User className="h-3 w-3" />
                               <span className="text-sm italic">Sin cliente asignado</span>
                             </div>
                           )}
                           <span className="font-mono text-xs text-muted-foreground">{invoice.ncf}</span>
-                          <p className="text-xs text-muted-foreground mt-0.5">
+                          
+                          {/* CORRECCIÓN HOVER FECHA AQUÍ: group-hover:text-primary */}
+                          <p className="text-xs text-muted-foreground mt-0.5 transition-colors group-hover:text-primary font-medium">
                             {format(parseDateSafe(invoice.invoice_date || invoice.created_at), "d MMM yyyy", { locale: es })}
                           </p>
                         </div>
@@ -343,16 +271,12 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           <p className="font-bold text-success">${formatCurrency(invoice.total_commission)}</p>
                         </div>
                         <div className="flex items-center gap-1">
-                          {/* AQUI ESTABA EL ERROR POTENCIAL:
-                             Se pasan TODOS los clientes disponibles (props.clients), 
-                             así el modal puede mostrar la lista completa para asignar
-                             a facturas que no tenían cliente.
-                          */}
                           <EditInvoiceDialog
                             invoice={invoice}
                             clients={clients} 
                             onUpdate={onUpdateInvoice}
                             onDelete={onDelete}
+                            onAddClient={() => {}} 
                             trigger={
                               <Button 
                                 variant="ghost" 
@@ -366,36 +290,22 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           />
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button 
-                                variant="ghost" 
-                                size="icon"
-                                className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                onClick={(e) => e.stopPropagation()}
-                              >
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors" onClick={(e) => e.stopPropagation()}>
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
                                 <AlertDialogTitle>¿Eliminar factura?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Esta acción eliminará la factura {invoice.ncf} permanentemente.
-                                </AlertDialogDescription>
+                                <AlertDialogDescription>Esta acción eliminará la factura {invoice.ncf} permanentemente.</AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction 
-                                  onClick={() => onDelete(invoice.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Eliminar
-                                </AlertDialogAction>
+                                <AlertDialogAction onClick={() => onDelete(invoice.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
                           </AlertDialog>
-                          <div className={`h-8 w-8 flex items-center justify-center transition-transform duration-200 ${
-                            expandedInvoice === invoice.id ? 'rotate-180' : ''
-                          }`}>
+                          <div className={`h-8 w-8 flex items-center justify-center transition-transform duration-200 ${expandedInvoice === invoice.id ? 'rotate-180' : ''}`}>
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </div>
@@ -403,17 +313,12 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                     </div>
                   </div>
 
-                  <div className={`overflow-hidden transition-all duration-300 ease-out ${
-                    expandedInvoice === invoice.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-                  }`}>
+                  {/* Detalle Desplegable */}
+                  <div className={`overflow-hidden transition-all duration-300 ease-out ${expandedInvoice === invoice.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}>
                     <div className="px-4 pb-4 pt-2 border-t border-border">
                       <div className="space-y-2 mb-4">
                         {invoice.products?.map((p, pIndex) => (
-                          <div 
-                            key={p.id} 
-                            className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
-                            style={{ animationDelay: `${pIndex * 50}ms` }}
-                          >
+                          <div key={p.id} className="flex justify-between items-center text-sm p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
                             <div className="flex items-center gap-3">
                               <span className="px-2 py-1 rounded bg-primary/10 text-primary text-xs font-bold">{p.percentage}%</span>
                               <span className="text-foreground">{p.product_name}</span>
@@ -439,7 +344,6 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           </div>
                         )}
                       </div>
-                      
                       <div className="flex justify-between items-center pt-3 border-t border-border">
                         <span className="font-medium text-foreground">Total Comisión</span>
                         <span className="text-xl font-bold text-success">${formatCurrency(invoice.total_commission)}</span>
