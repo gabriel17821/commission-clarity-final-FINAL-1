@@ -3,10 +3,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Search, UserPlus, X, Check, User, Phone, Mail, Trash2, ChevronRight, Sparkles } from 'lucide-react';
+import { Search, UserPlus, X, Check, User, Phone, Mail, Trash2, Sparkles } from 'lucide-react';
 import { Client } from '@/hooks/useClients';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { createPortal } from 'react-dom';
 
 interface ClientSelectorProps {
   clients: Client[];
@@ -31,8 +30,7 @@ export const ClientSelector = ({
   const [newEmail, setNewEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0, width: 0 });
-  const [isExpanded, setIsExpanded] = useState(false);
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -40,42 +38,28 @@ export const ClientSelector = ({
     c.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Update dropdown position
-  useEffect(() => {
-    if (showSuggestions && inputRef.current) {
-      const rect = inputRef.current.getBoundingClientRect();
-      setDropdownPosition({
-        top: rect.bottom + window.scrollY + 4,
-        left: rect.left + window.scrollX,
-        width: rect.width,
-      });
-    }
-  }, [showSuggestions, search]);
-
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setShowSuggestions(false);
         setHighlightedIndex(-1);
-        if (!selectedClient) setIsExpanded(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [selectedClient]);
+  }, []);
 
   useEffect(() => {
     setHighlightedIndex(-1);
   }, [search]);
 
-  const shouldShowDropdown = showSuggestions && search.trim().length > 0;
+  const shouldShowDropdown = showSuggestions;
 
   const handleSelectClient = (client: Client) => {
     onSelectClient(client);
     setSearch('');
     setShowSuggestions(false);
     setHighlightedIndex(-1);
-    setIsExpanded(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -151,197 +135,45 @@ export const ClientSelector = ({
     }
   };
 
-  const handleExpandClick = () => {
-    setIsExpanded(true);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  };
-
-  // Dropdown content rendered via portal
-  const dropdownContent = shouldShowDropdown ? createPortal(
-    <div 
-      className="fixed bg-popover border border-border rounded-xl shadow-2xl overflow-hidden animate-in fade-in-0 zoom-in-95"
-      style={{ 
-        top: dropdownPosition.top,
-        left: dropdownPosition.left,
-        width: dropdownPosition.width,
-        zIndex: 99999,
-      }}
-      onMouseDown={(e) => e.stopPropagation()}
-    >
-      {filteredClients.length > 0 ? (
-        <div className="max-h-48 overflow-y-auto">
-          {filteredClients.map((client, index) => (
-            <div
-              key={client.id}
-              className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 cursor-pointer group ${
-                highlightedIndex === index ? 'bg-primary/10' : 'hover:bg-muted/60'
-              }`}
-              onClick={() => handleSelectClient(client)}
-            >
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-primary/10">
-                <User className="h-4 w-4 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-foreground text-sm truncate">{client.name}</p>
-                {client.phone && (
-                  <p className="text-xs text-muted-foreground">{client.phone}</p>
-                )}
-              </div>
-              {onDeleteClient && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent style={{ zIndex: 100000 }}>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta acción eliminará el cliente "{client.name}" permanentemente.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction 
-                        onClick={(e) => handleDeleteClient(e, client.id)}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Eliminar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              )}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="p-4 text-center text-muted-foreground text-sm">
-          No se encontraron clientes
-        </div>
-      )}
-
-      <button 
-        className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 border-t border-border text-primary ${
-          highlightedIndex === filteredClients.length ? 'bg-primary/10' : 'hover:bg-primary/5'
-        }`}
-        onClick={() => {
-          setNewName(search.trim());
-          setDialogOpen(true);
-          setShowSuggestions(false);
-        }}
-      >
-        <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center">
-          <UserPlus className="h-4 w-4 text-primary" />
-        </div>
-        <span className="font-semibold text-sm">
-          {search.trim() ? `Crear "${search}"` : 'Crear nuevo cliente'}
-        </span>
-        <span className="ml-auto text-xs text-muted-foreground px-2 py-0.5 bg-muted rounded">Enter</span>
-      </button>
-    </div>,
-    document.body
-  ) : null;
-
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 relative" ref={containerRef}>
       {selectedClient ? (
-        // Selected client - Elegant card with clear hierarchy
+        // CLIENTE SELECCIONADO: Tarjeta compacta pero elegante
         <div 
-          className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/5 via-primary/3 to-transparent border-2 border-primary/20 hover:border-primary/40 transition-all duration-300 cursor-pointer"
-          onClick={() => onSelectClient(null)}
+          className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/10 via-white to-white dark:from-primary/20 dark:to-slate-900 border border-primary/20 shadow-sm transition-all duration-300"
         >
-          {/* Decorative accent */}
-          <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-primary to-primary/50" />
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary" />
           
-          <div className="flex items-center gap-4 p-4 pl-5">
-            {/* Avatar */}
-            <div className="relative">
-              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
-                <User className="h-7 w-7 text-primary-foreground" />
-              </div>
-              <div className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-success flex items-center justify-center ring-2 ring-background">
-                <Check className="h-3 w-3 text-success-foreground" />
-              </div>
+          <div className="flex items-center gap-3 p-3 pl-4">
+            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <User className="h-5 w-5 text-primary" />
             </div>
             
-            {/* Client Info */}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-primary uppercase tracking-wider mb-0.5">Cliente Asignado</p>
-              <p className="font-bold text-lg text-foreground truncate">{selectedClient.name}</p>
-              <div className="flex items-center gap-3 mt-1">
-                {selectedClient.phone && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Phone className="h-3 w-3" /> {selectedClient.phone}
-                  </span>
-                )}
-                {selectedClient.email && (
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <Mail className="h-3 w-3" /> {selectedClient.email}
-                  </span>
-                )}
-              </div>
+              <p className="text-[10px] font-black text-primary/70 uppercase tracking-widest mb-0.5">Cliente</p>
+              <p className="font-bold text-sm text-foreground truncate">{selectedClient.name}</p>
             </div>
             
-            {/* Change button */}
             <Button
               variant="ghost"
-              size="sm"
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full"
               onClick={(e) => {
                 e.stopPropagation();
                 onSelectClient(null);
               }}
             >
-              <X className="h-4 w-4 mr-1" />
-              Cambiar
+              <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
-      ) : !isExpanded ? (
-        // Collapsed state - Interactive card to expand
-        <button
-          onClick={handleExpandClick}
-          className="w-full group relative overflow-hidden rounded-2xl border-2 border-dashed border-muted-foreground/20 hover:border-primary/50 bg-gradient-to-br from-muted/30 to-transparent hover:from-primary/5 hover:to-transparent transition-all duration-300"
-        >
-          <div className="flex items-center gap-4 p-5">
-            {/* Icon container */}
-            <div className="h-14 w-14 rounded-2xl bg-muted/50 group-hover:bg-primary/10 flex items-center justify-center transition-colors">
-              <UserPlus className="h-7 w-7 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-            
-            {/* Text */}
-            <div className="flex-1 text-left">
-              <p className="font-semibold text-foreground group-hover:text-primary transition-colors">Asignar Cliente</p>
-              <p className="text-sm text-muted-foreground">Busca o crea un nuevo cliente</p>
-            </div>
-            
-            {/* Arrow */}
-            <div className="h-10 w-10 rounded-xl bg-muted/50 group-hover:bg-primary/10 flex items-center justify-center transition-all group-hover:translate-x-1">
-              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
-            </div>
-          </div>
-          
-          {/* Hover effect */}
-          <div className="absolute inset-0 bg-gradient-to-r from-primary/0 via-primary/5 to-primary/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-        </button>
       ) : (
-        // Expanded state - Search input with suggestions
-        <div ref={containerRef} className="relative animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="rounded-2xl border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4 space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium text-primary">Buscar cliente</span>
-            </div>
-            
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+        // BUSCADOR DIRECTO: Input visible siempre
+        <div className="relative animate-in fade-in duration-300">
+            <div className="relative group">
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-2 pointer-events-none">
+                 <Search className="h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              </div>
               <Input
                 ref={inputRef}
                 value={search}
@@ -349,53 +181,107 @@ export const ClientSelector = ({
                   setSearch(e.target.value);
                   setShowSuggestions(true);
                 }}
-                onFocus={() => {
-                  if (search.trim()) setShowSuggestions(true);
-                }}
+                onFocus={() => setShowSuggestions(true)}
                 onKeyDown={handleKeyDown}
-                placeholder="Nombre del cliente..."
-                className="pl-12 h-12 text-base rounded-xl border-muted-foreground/20 focus:border-primary"
+                placeholder="Buscar o crear cliente..."
+                className="pl-9 h-11 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl transition-all font-medium"
               />
             </div>
-            
-            {/* Quick actions */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                className="flex-1 h-9 text-xs"
-                onClick={() => setIsExpanded(false)}
-              >
-                Cancelar
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1 h-9 text-xs gap-1"
-                onClick={() => {
-                  setNewName('');
-                  setDialogOpen(true);
-                }}
-              >
-                <UserPlus className="h-3.5 w-3.5" />
-                Nuevo Cliente
-              </Button>
-            </div>
-            
-            {/* Recent clients hint */}
-            {clients.length > 0 && !search && (
-              <p className="text-xs text-muted-foreground text-center">
-                Escribe para buscar entre {clients.length} cliente{clients.length !== 1 ? 's' : ''}
-              </p>
-            )}
-          </div>
 
-          {dropdownContent}
+            {/* Sugerencias: Absolute puro, sin portales, pegado al input */}
+            {shouldShowDropdown && (
+              <div 
+                className="absolute top-full left-0 w-full mt-2 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl shadow-xl overflow-hidden animate-in fade-in-0 slide-in-from-top-1 z-50"
+              >
+                {filteredClients.length > 0 ? (
+                  <div className="max-h-60 overflow-y-auto scrollbar-thin">
+                    {filteredClients.map((client, index) => (
+                      <div
+                        key={client.id}
+                        className={`w-full px-4 py-2.5 text-left transition-colors flex items-center gap-3 cursor-pointer group ${
+                          highlightedIndex === index ? 'bg-primary/5' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
+                        }`}
+                        onClick={() => handleSelectClient(client)}
+                      >
+                        <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+                          <User className="h-4 w-4 text-slate-500 group-hover:text-primary transition-colors" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate">{client.name}</p>
+                          {client.phone && (
+                            <p className="text-[11px] text-muted-foreground">{client.phone}</p>
+                          )}
+                        </div>
+                        {onDeleteClient && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="z-[9999]">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Eliminar a "{client.name}" es permanente.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction 
+                                  onClick={(e) => handleDeleteClient(e, client.id)}
+                                  className="bg-destructive"
+                                >
+                                  Eliminar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  search.trim() && (
+                    <div className="p-3 text-center text-muted-foreground text-xs">
+                      No se encontraron resultados
+                    </div>
+                  )
+                )}
+
+                <button 
+                  className={`w-full px-4 py-3 text-left transition-colors flex items-center gap-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 text-primary ${
+                    highlightedIndex === filteredClients.length ? 'bg-primary/5' : 'hover:bg-primary/5'
+                  }`}
+                  onClick={() => {
+                    setNewName(search.trim());
+                    setDialogOpen(true);
+                    setShowSuggestions(false);
+                  }}
+                >
+                  <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/20">
+                    <UserPlus className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex flex-col items-start">
+                    <span className="font-bold text-sm">
+                       Crear "{search.trim() || 'Nuevo'}"
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">Agregar a la base de datos</span>
+                  </div>
+                </button>
+              </div>
+            )}
         </div>
       )}
 
-      {/* Dialog for creating new client */}
+      {/* Dialog creation remains the same but with higher z-index if needed */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md" style={{ zIndex: 100000 }}>
+        <DialogContent className="sm:max-w-md z-[9999]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -407,53 +293,46 @@ export const ClientSelector = ({
           <form onSubmit={handleAddNewClient} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="client-name">Nombre *</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="client-name"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Nombre del cliente"
-                  className="pl-9 h-11"
-                  required
-                  autoFocus
-                />
-              </div>
+              <Input
+                id="client-name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Nombre del cliente"
+                className="h-11"
+                required
+                autoFocus
+              />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="client-phone">Teléfono</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                <Label htmlFor="client-phone">Teléfono</Label>
                 <Input
-                  id="client-phone"
-                  value={newPhone}
-                  onChange={(e) => setNewPhone(e.target.value)}
-                  placeholder="809-000-0000"
-                  className="pl-9 h-11"
+                    id="client-phone"
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="Teléfono"
+                    className="h-11"
                 />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client-email">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="space-y-2">
+                <Label htmlFor="client-email">Email</Label>
                 <Input
-                  id="client-email"
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder="cliente@email.com"
-                  className="pl-9 h-11"
+                    id="client-email"
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="Email"
+                    className="h-11"
                 />
-              </div>
+                </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loading || !newName.trim()} className="gap-2">
+              <Button type="submit" disabled={loading || !newName.trim()} className="gap-2 bg-primary hover:bg-primary/90">
                 <Check className="h-4 w-4" />
-                {loading ? 'Creando...' : 'Crear Cliente'}
+                Crear Cliente
               </Button>
             </div>
           </form>
