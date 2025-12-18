@@ -7,9 +7,6 @@ export interface Client {
   name: string;
   phone?: string | null;
   email?: string | null;
-  address?: string | null;
-  notes?: string | null;
-  created_at: string;
 }
 
 export const useClients = () => {
@@ -24,82 +21,37 @@ export const useClients = () => {
         .order('name', { ascending: true });
 
       if (error) throw error;
-      setClients(data || []);
+      // Transformar nombres a mayúsculas al cargar
+      const sanitized = (data || []).map(c => ({ ...c, name: c.name.toUpperCase() }));
+      setClients(sanitized);
     } catch (error) {
       console.error('Error fetching clients:', error);
-      toast.error('Error al cargar los clientes');
+      toast.error('Error al cargar clientes');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchClients();
-  }, []);
+  useEffect(() => { fetchClients(); }, []);
 
-  const addClient = async (name: string, phone?: string, email?: string, address?: string, notes?: string): Promise<Client | null> => {
+  const addClient = async (name: string, phone?: string, email?: string): Promise<Client | null> => {
     try {
+      const upperName = name.toUpperCase();
       const { data, error } = await supabase
         .from('clients')
-        .insert([{ name, phone, email, address, notes }])
+        .insert([{ name: upperName, phone, email }])
         .select()
         .single();
 
       if (error) throw error;
-
       setClients(prev => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)));
-      toast.success(`Cliente "${name}" agregado`);
+      toast.success(`Cliente "${upperName}" agregado`);
       return data;
     } catch (error) {
-      console.error('Error adding client:', error);
       toast.error('Error al agregar el cliente');
       return null;
     }
   };
 
-  const updateClient = async (id: string, updates: Partial<Client>): Promise<boolean> => {
-    try {
-      const { error } = await supabase
-        .from('clients')
-        .update(updates)
-        .eq('id', id);
-
-      if (error) throw error;
-
-      setClients(prev =>
-        prev.map(c => (c.id === id ? { ...c, ...updates } : c))
-      );
-      toast.success('Cliente actualizado');
-      return true;
-    } catch (error) {
-      console.error('Error updating client:', error);
-      toast.error('Error al actualizar el cliente');
-      return false;
-    }
-  };
-
-  const deleteClient = async (id: string): Promise<boolean> => {
-    try {
-      const { error } = await supabase.from('clients').delete().eq('id', id);
-
-      if (error) throw error;
-
-      setClients(prev => prev.filter(c => c.id !== id));
-      toast.success('Cliente eliminado');
-      return true;
-    } catch (error) {
-      console.error('Error deleting client:', error);
-      toast.error('Error al eliminar el cliente');
-      return false;
-    }
-  };
-
-  return {
-    clients,
-    loading,
-    addClient,
-    updateClient,
-    deleteClient,
-    refetch: fetchClients,
-  };
+  return { clients, loading, addClient, refetch: fetchClients };
 };
