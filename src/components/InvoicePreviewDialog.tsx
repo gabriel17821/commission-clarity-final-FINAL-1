@@ -3,16 +3,8 @@ import { Button } from '@/components/ui/button';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ArrowLeft, Check, Save } from 'lucide-react';
-
-interface Breakdown {
-  name: string;
-  label: string;
-  amount: number;
-  percentage: number;
-  commission: number;
-  color: string;
-}
+import { ArrowLeft, Check, Save, User, Hash, Calendar } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface InvoicePreviewDialogProps {
   open: boolean;
@@ -24,7 +16,7 @@ interface InvoicePreviewDialogProps {
     invoiceDate: Date;
     clientName: string | null;
     totalAmount: number;
-    breakdown: Breakdown[];
+    breakdown: any[];
     restAmount: number;
     restPercentage: number;
     restCommission: number;
@@ -32,108 +24,81 @@ interface InvoicePreviewDialogProps {
   };
 }
 
-export const InvoicePreviewDialog = ({
-  open,
-  onOpenChange,
-  onConfirm,
-  loading,
-  data,
-}: InvoicePreviewDialogProps) => {
-  // CORRECCIÓN: Filtrar solo los productos que tienen un monto mayor a 0
+export const InvoicePreviewDialog = ({ open, onOpenChange, onConfirm, loading, data }: InvoicePreviewDialogProps) => {
   const activeProducts = data.breakdown.filter(item => item.amount > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto p-0">
-        {/* Invoice Header */}
-        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-5 border-b border-border">
-          <DialogHeader className="p-0">
-            <DialogTitle className="flex items-center gap-2 text-lg font-bold">
-              <Save className="h-5 w-5 text-primary" />
-              Confirmar Factura
+      <DialogContent className="sm:max-w-2xl p-0 overflow-hidden flex flex-col max-h-[90vh] border-none shadow-2xl">
+        {/* Header Fijo */}
+        <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent px-6 py-5 border-b border-border shrink-0">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl font-bold text-primary">
+              <Save className="h-6 w-6" />
+              {loading ? 'Guardando Factura...' : 'Confirmar Factura'}
             </DialogTitle>
           </DialogHeader>
         </div>
 
-        {/* Invoice Body - Real invoice format */}
-        <div className="px-6 py-5 space-y-6">
-          {/* Header Info Grid */}
-          <div className="grid grid-cols-2 gap-x-8 gap-y-4 pb-5 border-b border-dashed border-border">
-            <div>
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">NCF</span>
-              <p className="font-mono text-base font-bold text-foreground mt-0.5">{data.ncf}</p>
+        {/* Área de Contenido con Scroll Independiente */}
+        <div className="flex-1 overflow-y-auto px-8 py-6 space-y-8 bg-background">
+          {/* Info Principal */}
+          <div className="grid grid-cols-2 gap-x-12 gap-y-6 pb-6 border-b border-dashed">
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-black flex items-center gap-1">
+                <Hash className="h-3 w-3" /> NCF
+              </span>
+              <p className="font-mono text-lg font-bold text-foreground">{data.ncf}</p>
             </div>
-            <div className="text-right">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Fecha</span>
-              <p className="text-base font-semibold text-foreground mt-0.5">
+            <div className="text-right space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-black flex items-center justify-end gap-1">
+                <Calendar className="h-3 w-3" /> FECHA
+              </span>
+              <p className="text-lg font-bold text-foreground">
                 {format(data.invoiceDate, "d 'de' MMMM, yyyy", { locale: es })}
               </p>
             </div>
-            <div className="col-span-2">
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">Cliente</span>
-              <p className="text-base font-semibold text-foreground mt-0.5">
-                {data.clientName || 'Sin cliente asignado'}
+            <div className="col-span-2 space-y-1">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-black flex items-center gap-1">
+                <User className="h-3 w-3" /> CLIENTE
+              </span>
+              <p className="text-lg font-bold text-foreground">
+                {data.clientName || 'SIN CLIENTE ASIGNADO'}
               </p>
             </div>
           </div>
 
-          {/* Products Table */}
-          <div>
-            {/* Table Header */}
-            <div className="grid grid-cols-12 gap-2 pb-2 border-b-2 border-foreground/20 text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-              <div className="col-span-5">Descripción</div>
+          {/* Tabla de Productos */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-12 gap-2 text-[10px] uppercase font-black text-muted-foreground border-b-2 pb-2">
+              <div className="col-span-6">Descripción</div>
               <div className="col-span-2 text-center">%</div>
-              <div className="col-span-2 text-right">Monto</div>
-              <div className="col-span-3 text-right">Comisión</div>
+              <div className="col-span-4 text-right">Comisión</div>
             </div>
 
-            {/* Product Rows - USANDO LA LISTA FILTRADA */}
-            <div className="divide-y divide-border/50">
-              {activeProducts.length > 0 ? (
-                activeProducts.map((item, index) => (
-                  <div key={index} className="grid grid-cols-12 gap-2 py-3 items-center">
-                    <div className="col-span-5 flex items-center gap-2">
-                      <span 
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="font-medium text-foreground text-sm">{item.name}</span>
-                    </div>
-                    <div className="col-span-2 text-center">
-                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-muted text-xs font-bold text-muted-foreground">
-                        {item.percentage}%
-                      </span>
-                    </div>
-                    <div className="col-span-2 text-right text-sm text-muted-foreground">
-                      ${formatNumber(item.amount)}
-                    </div>
-                    <div className="col-span-3 text-right text-sm font-semibold text-success">
-                      ${formatCurrency(item.commission)}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-4 text-center text-sm text-muted-foreground italic">
-                  Ningún producto del catálogo en esta factura
-                </div>
-              )}
-
-              {/* Rest Row */}
-              {data.restAmount > 0 && (
-                <div className="grid grid-cols-12 gap-2 py-3 items-center bg-secondary/20 -mx-6 px-6">
-                  <div className="col-span-5 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0 bg-secondary" />
-                    <span className="font-medium text-foreground text-sm">Resto de productos</span>
+            <div className="space-y-3">
+              {activeProducts.map((item, index) => (
+                <div key={index} className="grid grid-cols-12 gap-2 items-center py-1">
+                  <div className="col-span-6 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                    <span className="font-bold text-sm text-foreground">{item.name}</span>
                   </div>
                   <div className="col-span-2 text-center">
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-secondary text-xs font-bold text-secondary-foreground">
-                      {data.restPercentage}%
-                    </span>
+                    <span className="px-2 py-0.5 rounded-lg bg-muted text-[10px] font-black">{item.percentage}%</span>
                   </div>
-                  <div className="col-span-2 text-right text-sm text-muted-foreground">
-                    ${formatNumber(data.restAmount)}
+                  <div className="col-span-4 text-right font-bold text-success">
+                    ${formatCurrency(item.commission)}
                   </div>
-                  <div className="col-span-3 text-right text-sm font-semibold text-success">
+                </div>
+              ))}
+
+              {data.restAmount > 0 && (
+                <div className="grid grid-cols-12 gap-2 items-center py-3 px-4 bg-muted/40 rounded-xl border border-dashed border-border">
+                  <div className="col-span-6 font-bold text-sm">Resto de productos</div>
+                  <div className="col-span-2 text-center">
+                    <span className="px-2 py-0.5 rounded-lg bg-primary/20 text-primary text-[10px] font-black">{data.restPercentage}%</span>
+                  </div>
+                  <div className="col-span-4 text-right font-bold text-success">
                     ${formatCurrency(data.restCommission)}
                   </div>
                 </div>
@@ -141,43 +106,40 @@ export const InvoicePreviewDialog = ({
             </div>
           </div>
 
-          {/* Totals Section */}
-          <div className="pt-4 border-t-2 border-foreground/20 space-y-3">
-            {/* Subtotal */}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Total Factura</span>
-              <span className="font-bold text-foreground text-lg">${formatNumber(data.totalAmount)}</span>
-            </div>
-            
-            {/* Total Commission - Highlighted */}
-            <div className="flex items-center justify-between p-4 -mx-6 bg-gradient-to-r from-success/15 via-success/10 to-success/5 border-y border-success/20">
-              <span className="font-semibold text-foreground">Tu Comisión Total</span>
-              <span className="text-3xl font-black text-success">${formatCurrency(data.totalCommission)}</span>
+          {/* Totales */}
+          <div className="pt-6 border-t-2 border-border space-y-4">
+            <div className="flex justify-between items-center px-2">
+              <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">Total Factura</span>
+              <span className="text-2xl font-black text-foreground">${formatNumber(data.totalAmount)}</span>
             </div>
           </div>
         </div>
 
-        {/* Footer Actions */}
-        <DialogFooter className="px-6 py-4 border-t border-border bg-muted/30 flex-row gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            className="flex-1 gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Volver
-          </Button>
-          <Button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 gap-2 gradient-success text-success-foreground"
-          >
-            <Check className="h-4 w-4" />
-            {loading ? 'Guardando...' : 'Confirmar'}
-          </Button>
-        </DialogFooter>
+        {/* Footer Fijo (Sticky) - NUNCA SE OCULTA */}
+        <div className="bg-muted/50 p-6 border-t border-border shrink-0">
+          <div className="flex items-center justify-between mb-6 bg-success/10 p-5 rounded-2xl border-2 border-success/20">
+            <span className="font-black text-success-foreground uppercase tracking-tighter text-sm">TU COMISIÓN TOTAL</span>
+            <span className="text-4xl font-black text-success tracking-tighter">${formatCurrency(data.totalCommission)}</span>
+          </div>
+          
+          <div className="flex gap-4">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-14 text-base font-bold border-2 border-border hover:bg-background"
+            >
+              <ArrowLeft className="mr-2 h-5 w-5" /> Volver
+            </Button>
+            <Button
+              onClick={onConfirm}
+              disabled={loading}
+              className="flex-1 h-14 text-base font-bold gradient-success shadow-lg"
+            >
+              <Check className="mr-2 h-5 w-5" />
+              {loading ? 'Guardando...' : 'Confirmar y Guardar'}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
