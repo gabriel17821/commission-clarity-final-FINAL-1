@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Package, Trash2, Save, User, Hash, DollarSign, CalendarIcon } from "lucide-react";
+import { Package, Trash2, Save, User, DollarSign, CalendarIcon } from "lucide-react";
 import { ProductManager } from "@/components/ProductManager";
 import { ClientSelector } from "@/components/ClientSelector";
 import { SaveSuccessAnimation } from "@/components/SaveSuccessAnimation";
@@ -44,16 +44,13 @@ export const CalculatorView = ({
   const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [showSaveAnimation, setShowSaveAnimation] = useState(false);
   
-  // Referencia para evitar resetear en el primer render si ya hay datos
   const isFirstRender = useRef(true);
 
-  // FIX: Resetear formulario cuando cambia el vendedor activo (excepto la primera vez si queremos mantener default)
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
       return;
     }
-    // Si cambia el vendedor, reiniciamos todo para evitar mezcla de datos
     handleReset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSeller?.id]);
@@ -107,43 +104,22 @@ export const CalculatorView = ({
         <CardContent className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            {/* --- COLUMNA IZQUIERDA: DATOS GENERALES (Más compacta 4 columnas) --- */}
-            <div className="lg:col-span-4 flex flex-col gap-6">
+            {/* --- COLUMNA IZQUIERDA: INPUTS (4 cols) --- */}
+            <div className="lg:col-span-4 flex flex-col gap-5">
               
-              {/* Bloque Subtotal (Primero para jerarquía visual) */}
-              <div className="space-y-2 bg-slate-50/80 dark:bg-slate-900/50 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
-                <Label className="text-xs font-bold text-slate-500 uppercase flex items-center justify-between">
-                  <span className="flex items-center gap-2"><DollarSign className="h-3 w-3 text-primary"/> Total Factura</span>
-                  <span className="text-[9px] bg-white border px-1.5 py-0.5 rounded text-slate-400">SIN ITBIS</span>
-                </Label>
-                <div className="relative group">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
-                  <Input 
-                    value={displayValue} 
-                    onChange={e=>{
-                      const f = formatInputNumber(e.target.value);
-                      setDisplayValue(f);
-                      setTotalInvoice(parseFormattedNumber(f));
-                    }}
-                    className="h-14 pl-8 text-3xl font-black border-slate-200 dark:border-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl bg-white tracking-tight" 
-                    placeholder="0.00" 
-                  />
-                </div>
-              </div>
-
-              {/* Fecha y NCF en una fila apretada */}
+              {/* 1. FECHA Y NCF (Arriba del todo) */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    Fecha
+                    Fecha Factura
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className={cn(
-                        "w-full justify-start text-left font-bold h-10 rounded-xl border-slate-200 text-sm px-3",
+                        "w-full justify-start text-left font-bold h-11 rounded-xl border-slate-200 text-sm px-3 hover:bg-slate-50",
                         !invoiceDate && "text-muted-foreground"
                       )}>
-                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-primary" />
+                        <CalendarIcon className="mr-2 h-4 w-4 text-primary" />
                         {format(invoiceDate, 'dd/MM/yyyy')}
                       </Button>
                     </PopoverTrigger>
@@ -157,7 +133,7 @@ export const CalculatorView = ({
                   <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                     NCF (4 Finales)
                   </Label>
-                  <div className="flex items-center bg-white rounded-xl border border-slate-200 h-10 px-3 focus-within:ring-2 ring-primary/20 transition-all">
+                  <div className="flex items-center bg-white rounded-xl border border-slate-200 h-11 px-3 focus-within:ring-2 ring-primary/20 transition-all hover:bg-slate-50">
                     <span className="text-[10px] font-mono font-bold text-slate-400 mr-2 border-r pr-2 py-0.5">B01</span>
                     <Input 
                       value={ncfSuffix} 
@@ -169,21 +145,46 @@ export const CalculatorView = ({
                 </div>
               </div>
 
-              {/* Selector de Cliente */}
+              {/* 2. CLIENTE (En medio) */}
               <div className="space-y-1.5">
                 <Label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
                    Cliente
                 </Label>
-                <ClientSelector 
-                  clients={clients} 
-                  selectedClient={selectedClient} 
-                  onSelectClient={setSelectedClient} 
-                  onAddClient={onAddClient} 
-                />
+                <div className="bg-slate-50/50 p-1 rounded-2xl border border-slate-100">
+                    <ClientSelector 
+                    clients={clients} 
+                    selectedClient={selectedClient} 
+                    onSelectClient={setSelectedClient} 
+                    onAddClient={onAddClient} 
+                    />
+                </div>
               </div>
 
-              {/* Botón Guardar Mobile (Visible solo en pantallas pequeñas) */}
-              <div className="lg:hidden pt-4">
+              <div className="flex-1"></div>
+
+              {/* 3. TOTAL FACTURA (Abajo, Destacado con Fondo Oscuro) */}
+              <div className="space-y-2 bg-slate-900 dark:bg-slate-800 p-5 rounded-2xl shadow-lg shadow-slate-900/10">
+                <Label className="text-xs font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-2 text-white"><DollarSign className="h-4 w-4 text-primary"/> Total Factura</span>
+                  <span className="text-[9px] bg-white/10 text-white border border-white/20 px-2 py-0.5 rounded font-black tracking-wider">SIN ITBIS</span>
+                </Label>
+                <div className="relative group">
+                  <span className="absolute left-0 top-1/2 -translate-y-1/2 text-3xl font-medium text-slate-500 pointer-events-none">$</span>
+                  <Input 
+                    value={displayValue} 
+                    onChange={e=>{
+                      const f = formatInputNumber(e.target.value);
+                      setDisplayValue(f);
+                      setTotalInvoice(parseFormattedNumber(f));
+                    }}
+                    className="h-16 pl-6 text-5xl font-black border-none focus:ring-0 bg-transparent text-white placeholder:text-slate-700 tracking-tight w-full p-0" 
+                    placeholder="0" 
+                  />
+                </div>
+              </div>
+
+              {/* Botón Mobile */}
+              <div className="lg:hidden">
                  <Button 
                   disabled={!isFormValid}
                   onClick={()=>setShowPreviewDialog(true)}
@@ -192,10 +193,9 @@ export const CalculatorView = ({
                   <Save className="mr-2 h-4 w-4" /> Guardar Factura
                 </Button>
               </div>
-
             </div>
 
-            {/* --- COLUMNA DERECHA: PRODUCTOS (Más ancha 8 columnas) --- */}
+            {/* --- COLUMNA DERECHA: PRODUCTOS (8 cols) --- */}
             <div className="lg:col-span-8 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/20 rounded-2xl border border-slate-100 p-5">
               <div className="flex-1 space-y-4">
                 <div className="flex items-center justify-between mb-1">
@@ -224,51 +224,50 @@ export const CalculatorView = ({
 
                 <Separator className="bg-slate-200" />
 
-                {/* Área de Totales Compacta Horizontal */}
+                {/* Área de Totales */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end pt-2">
-                    
                     {/* Resto */}
-                    <div className="bg-white dark:bg-slate-950 p-3 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
+                    <div className="bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-100 shadow-sm flex items-center justify-between">
                         <div className="flex flex-col">
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Resto ({restPercentage}%)</span>
                             <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
                         </div>
-                        <span className="text-xl font-bold text-slate-700 dark:text-slate-200 tabular-nums">
+                        <span className="text-2xl font-bold text-slate-700 dark:text-slate-200 tabular-nums">
                             ${formatNumber(calculations.restAmount)}
                         </span>
                     </div>
 
-                    {/* Comisión Total y Botones */}
+                    {/* Comisión Total y Botones (Lado a lado) */}
                     <div className="flex items-center gap-3">
-                        <div className="flex-1 bg-primary/5 dark:bg-primary/10 p-3 rounded-xl border border-primary/10 flex flex-col justify-center">
+                        <div className="flex-1 bg-primary/5 dark:bg-primary/10 p-3 rounded-xl border border-primary/10 flex flex-col justify-center h-20">
                             <p className="text-[10px] font-black text-primary/60 uppercase tracking-widest mb-0.5">Comisión Total</p>
-                            <p className="text-2xl font-black text-primary tracking-tight tabular-nums">
+                            <p className="text-3xl font-black text-primary tracking-tight tabular-nums">
                                 ${formatCurrency(calculations.totalCommission)}
                             </p>
                         </div>
                         
-                        <div className="flex flex-col gap-2">
+                        {/* Botones de acción horizontal */}
+                        <div className="flex flex-row items-center gap-2 h-20">
                              <Button 
                                 variant="outline" 
                                 size="icon"
                                 onClick={handleReset} 
-                                className="h-10 w-10 text-slate-400 hover:text-destructive hover:bg-destructive/10 rounded-xl border-slate-200"
+                                className="h-full w-14 text-slate-400 hover:text-destructive hover:bg-destructive/10 rounded-xl border-slate-200"
                                 title="Limpiar formulario"
                             >
-                                <Trash2 size={18} />
+                                <Trash2 size={20} />
                             </Button>
                             <Button 
                                 disabled={!isFormValid}
                                 onClick={()=>setShowPreviewDialog(true)}
-                                className="h-10 px-4 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-xl font-bold"
+                                className="h-full px-6 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20 rounded-xl font-bold transition-all hover:scale-[1.02] active:scale-[0.98]"
                             >
-                                <Save className="h-4 w-4 mr-2" />
+                                <Save className="h-5 w-5 mr-2" />
                                 Guardar
                             </Button>
                         </div>
                     </div>
                 </div>
-
               </div>
             </div>
 
