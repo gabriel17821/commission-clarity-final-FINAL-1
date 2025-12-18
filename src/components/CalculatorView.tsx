@@ -96,7 +96,6 @@ export const CalculatorView = ({
             {/* --- COLUMNA IZQUIERDA: INPUTS --- */}
             <div className="lg:col-span-7 space-y-8">
               
-              {/* Bloque 1: Fecha y NCF */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
@@ -133,7 +132,6 @@ export const CalculatorView = ({
                 </div>
               </div>
 
-              {/* Bloque 2: Cliente */}
               <div className="space-y-2">
                 <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
                   <User className="h-3 w-3 text-primary" /> Cliente
@@ -148,14 +146,13 @@ export const CalculatorView = ({
 
               <Separator className="bg-slate-100" />
 
-              {/* Bloque 3: Monto Principal (AQUI ESTA EL CAMBIO DE TIPOGRAFÍA) */}
               <div className="space-y-3">
                 <Label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
                   <span className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary"/> Subtotal de la factura</span>
                   <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black uppercase">Antes de ITBIS</span>
                 </Label>
                 <div className="relative group">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-3xl font-bold text-slate-300 group-focus-within:text-primary transition-colors">$</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-4xl font-black text-slate-300 group-focus-within:text-primary transition-colors">$</span>
                   <Input 
                     value={displayValue} 
                     onChange={e=>{
@@ -163,17 +160,15 @@ export const CalculatorView = ({
                       setDisplayValue(f);
                       setTotalInvoice(parseFormattedNumber(f));
                     }}
-                    // AQUI: h-16 (altura normal) pero text-4xl (letra grande)
-                    className="h-16 pl-10 text-4xl font-black border-2 border-slate-100 dark:border-slate-800 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all rounded-2xl bg-slate-50/50 tracking-tight" 
+                    className="h-20 pl-12 text-5xl font-black border-2 border-slate-100 dark:border-slate-800 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all rounded-2xl bg-slate-50/50 tracking-tight" 
                     placeholder="0.00" 
                   />
                 </div>
               </div>
             </div>
 
-            {/* --- COLUMNA DERECHA: DESGLOSE --- */}
+            {/* --- COLUMNA DERECHA --- */}
             <div className="lg:col-span-5 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-slate-100 p-6">
-              
               <div className="flex-1 space-y-6">
                 <div className="flex items-center justify-between mb-2">
                    <h3 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-2">
@@ -187,7 +182,6 @@ export const CalculatorView = ({
                    />
                 </div>
 
-                {/* Lista de productos */}
                 <div className="space-y-3">
                    <ProductManager 
                       products={products} 
@@ -202,7 +196,6 @@ export const CalculatorView = ({
 
                 <Separator className="bg-slate-200" />
 
-                {/* Sección Resto - Estilo Row limpio */}
                 <div className="flex items-center justify-between py-2">
                   <div className="flex items-center gap-3">
                     <div className="flex flex-col">
@@ -217,7 +210,6 @@ export const CalculatorView = ({
                   </div>
                 </div>
 
-                {/* Caja de Comisión Total */}
                 <div className="bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-100 shadow-sm mt-4">
                    <div className="flex justify-between items-end">
                       <div>
@@ -238,7 +230,6 @@ export const CalculatorView = ({
                 </div>
               </div>
 
-              {/* Botón de Guardado */}
               <div className="mt-6">
                 <Button 
                   disabled={!isFormValid}
