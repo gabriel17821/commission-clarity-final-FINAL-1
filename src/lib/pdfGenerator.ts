@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Invoice } from '@/hooks/useInvoices';
 import { formatCurrency, formatNumber } from '@/lib/formatters';
-import { format } from 'date-fns';
+import { format, getMonth } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 // Types for breakdown PDF
@@ -42,6 +42,17 @@ const parseDate = (dateString: string): Date => {
   return new Date(dateString);
 };
 
+// Colors - Light greys for printing (no pure black)
+const colors = {
+  darkGrey: '#404040',
+  mediumGrey: '#666666',
+  lightGrey: '#888888',
+  veryLightGrey: '#e5e5e5',
+  background: '#f8f8f8',
+  border: '#d0d0d0',
+  success: '#2d8a4e',
+};
+
 // Generate breakdown PDF with light grey design for printing
 export const generateBreakdownPdf = async (data: BreakdownData, selectedMonth: string): Promise<void> => {
   const doc = new jsPDF({
@@ -53,17 +64,6 @@ export const generateBreakdownPdf = async (data: BreakdownData, selectedMonth: s
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 15;
   let yPos = 20;
-
-  // Colors - Light greys for printing (no pure black)
-  const colors = {
-    darkGrey: '#404040',
-    mediumGrey: '#666666',
-    lightGrey: '#888888',
-    veryLightGrey: '#e5e5e5',
-    background: '#f8f8f8',
-    border: '#d0d0d0',
-    success: '#2d8a4e',
-  };
 
   // Header - Light grey background instead of dark
   doc.setFillColor(colors.veryLightGrey);
@@ -100,7 +100,6 @@ export const generateBreakdownPdf = async (data: BreakdownData, selectedMonth: s
   doc.setFontSize(9);
   doc.text('RESUMEN', margin + 5, yPos + 2);
   
-  const productCount = data.products.length + (data.rest.totalAmount > 0 ? 1 : 0);
   // Count unique invoices by NCF
   const uniqueNcfs = new Set<string>();
   data.products.forEach(p => p.entries.forEach(e => uniqueNcfs.add(e.ncf)));
@@ -340,17 +339,6 @@ export const generateMonthlyPDF = (invoices: Invoice[], monthLabel: string) => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   
-  // Light grey color palette for printing
-  const colors = {
-    darkGrey: '#404040',
-    mediumGrey: '#666666',
-    lightGrey: '#888888',
-    veryLightGrey: '#e5e5e5',
-    background: '#f8f8f8',
-    border: '#d0d0d0',
-    success: '#2d8a4e',
-  };
-  
   // Header - light background
   doc.setFillColor(colors.veryLightGrey);
   doc.roundedRect(10, 10, pageWidth - 20, 30, 3, 3, 'F');
@@ -575,4 +563,105 @@ export const generateMonthlyPDF = (invoices: Invoice[], monthLabel: string) => {
   }
   
   doc.save(`reporte-${monthLabel.toLowerCase().replace(' ', '-')}.pdf`);
+};
+
+export const generateAnnualPDF = (year: number, invoices: Invoice[], sellerName: string, label: string) => {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  
+  // Header
+  doc.setFillColor(colors.veryLightGrey);
+  doc.roundedRect(10, 10, pageWidth - 20, 35, 3, 3, 'F');
+  doc.setDrawColor(colors.border);
+  doc.roundedRect(10, 10, pageWidth - 20, 35, 3, 3, 'S');
+  
+  doc.setTextColor(colors.darkGrey);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('REPORTE ANUAL DE COMISIONES', pageWidth / 2, 24, { align: 'center' });
+  
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(colors.mediumGrey);
+  doc.text(label.toUpperCase(), pageWidth / 2, 34, { align: 'center' });
+  
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Vendedor: ${sellerName}`, pageWidth / 2, 40, { align: 'center' });
+  
+  // Aggregation Logic
+  const monthlyData = Array.from({ length: 12 }, (_, i) => {
+    return {
+      monthIndex: i,
+      name: format(new Date(year, i, 15), 'MMMM', { locale: es }),
+      sales: 0,
+      commission: 0,
+      count: 0
+    };
+  });
+  
+  let totalSales = 0;
+  let totalCommission = 0;
+  
+  invoices.forEach(inv => {
+    const date = parseDate(inv.invoice_date || inv.created_at);
+    const month = getMonth(date);
+    if (monthlyData[month]) {
+      monthlyData[month].sales += Number(inv.total_amount);
+      monthlyData[month].commission += Number(inv.total_commission);
+      monthlyData[month].count += 1;
+      
+      totalSales += Number(inv.total_amount);
+      totalCommission += Number(inv.total_commission);
+    }
+  });
+  
+  // Table Body
+  const tableData = monthlyData
+    .filter(m => m.count > 0)
+    .map(m => [
+      m.name.charAt(0).toUpperCase() + m.name.slice(1),
+      String(m.count),
+      `$${formatNumber(m.sales)}`,
+      `$${formatCurrency(m.commission)}`
+    ]);
+    
+  // Add Totals Row
+  tableData.push([
+    'TOTAL',
+    String(invoices.length),
+    `$${formatNumber(totalSales)}`,
+    `$${formatCurrency(totalCommission)}`
+  ]);
+  
+  autoTable(doc, {
+    startY: 55,
+    head: [['Mes', 'Facturas', 'Ventas', 'Comisión']],
+    body: tableData,
+    theme: 'grid',
+    styles: {
+      fontSize: 10,
+      cellPadding: 4,
+      textColor: colors.darkGrey,
+    },
+    headStyles: {
+      fillColor: colors.veryLightGrey,
+      textColor: colors.darkGrey,
+      fontStyle: 'bold',
+    },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 30, halign: 'center' },
+      2: { cellWidth: 40, halign: 'right' },
+      3: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: colors.success },
+    },
+    didParseCell: (data) => {
+      if (data.row.index === tableData.length - 1) {
+        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fillColor = colors.veryLightGrey;
+      }
+    }
+  });
+  
+  doc.save(`reporte-anual-${year}.pdf`);
 };

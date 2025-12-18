@@ -1,8 +1,6 @@
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Settings, Upload, Download, Trash2, FileUp, AlertTriangle, Check, Loader2, Users, Package } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,7 +32,6 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
       const text = await file.text();
       const lines = text.split('\n').filter(line => line.trim());
       
-      // Skip header if present
       const startIndex = lines[0].toLowerCase().includes('nombre') ? 1 : 0;
       
       const newClients: { name: string; phone?: string; email?: string }[] = [];
@@ -55,9 +52,7 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
         return;
       }
 
-      // Insert all clients
       const { error } = await supabase.from('clients').insert(newClients);
-
       if (error) throw error;
 
       toast.success(`${newClients.length} clientes importados correctamente`);
@@ -67,16 +62,13 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
       toast.error('Error al importar el archivo CSV');
     } finally {
       setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
   const handleExportData = async () => {
     setExporting(true);
     try {
-      // Fetch all data
       const [invoicesRes, invoiceProductsRes, clientsRes, productsRes, sellersRes, settingsRes] = await Promise.all([
         supabase.from('invoices').select('*'),
         supabase.from('invoice_products').select('*'),
@@ -106,7 +98,6 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
       a.download = `backup_comisiones_${new Date().toISOString().split('T')[0]}.json`;
       a.click();
       URL.revokeObjectURL(url);
-
       toast.success('Backup exportado correctamente');
     } catch (error) {
       console.error('Error exporting data:', error);
@@ -129,42 +120,82 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
         throw new Error('Archivo de backup inválido');
       }
 
-      // Delete existing data first
+      // 1. Limpiar datos existentes (Borrón y Cuenta Nueva)
+      await supabase.from('invoice_products').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      await supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
       await Promise.all([
-        supabase.from('invoice_products').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        supabase.from('clients').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        supabase.from('products').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        supabase.from('sellers').delete().neq('id', '00000000-0000-0000-0000-000000000000')
       ]);
 
-      // Import in order
-      if (backup.data.clients?.length) {
-        await supabase.from('clients').upsert(backup.data.clients, { onConflict: 'id' });
-      }
-      if (backup.data.products?.length) {
-        await supabase.from('products').upsert(backup.data.products, { onConflict: 'id' });
-      }
+      // 2. Insertar Catálogos
+      // Detectamos cuál será el ID del vendedor por defecto para asignárselo a las facturas huérfanas
+      let defaultSellerId = null;
       if (backup.data.sellers?.length) {
-        await supabase.from('sellers').upsert(backup.data.sellers, { onConflict: 'id' });
-      }
-      if (backup.data.settings?.length) {
-        await supabase.from('settings').upsert(backup.data.settings, { onConflict: 'id' });
-      }
-      if (backup.data.invoices?.length) {
-        await supabase.from('invoices').insert(backup.data.invoices);
-      }
-      if (backup.data.invoice_products?.length) {
-        await supabase.from('invoice_products').insert(backup.data.invoice_products);
+        const { error } = await supabase.from('sellers').insert(backup.data.sellers);
+        if (error) throw new Error('Error importando vendedores: ' + error.message);
+        
+        // Buscamos el vendedor default en los datos importados
+        const defaultSeller = backup.data.sellers.find((s: any) => s.is_default);
+        defaultSellerId = defaultSeller ? defaultSeller.id : backup.data.sellers[0].id;
       }
 
-      toast.success('Datos restaurados correctamente. Recarga la página.');
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
+      if (backup.data.clients?.length) {
+        const { error } = await supabase.from('clients').insert(backup.data.clients);
+        if (error) throw new Error('Error importando clientes: ' + error.message);
+      }
+      
+      if (backup.data.products?.length) {
+        const { error } = await supabase.from('products').insert(backup.data.products);
+        if (error) throw new Error('Error importando productos: ' + error.message);
+      }
+      
+      if (backup.data.settings?.length) {
+        const { error } = await supabase.from('settings').upsert(backup.data.settings, { onConflict: 'key' });
+        if (error) throw new Error('Error importando configuración: ' + error.message);
+      }
+
+      // 3. Insertar Facturas (Con auto-corrección de vendedor)
+      if (backup.data.invoices?.length) {
+        const cleanInvoices = backup.data.invoices.map((inv: any) => {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { clients, sellers, products, ...rest } = inv;
+          
+          // CORRECCIÓN AUTOMÁTICA: Si la factura no tiene vendedor, le ponemos el default
+          if (!rest.seller_id && defaultSellerId) {
+            rest.seller_id = defaultSellerId;
+          }
+          
+          return rest;
+        });
+        
+        const { error } = await supabase.from('invoices').insert(cleanInvoices);
+        if (error) throw new Error('Error importando facturas: ' + error.message);
+      }
+
+      // 4. Insertar Productos de Facturas
+      if (backup.data.invoice_products?.length) {
+        const { error } = await supabase.from('invoice_products').insert(backup.data.invoice_products);
+        if (error) throw new Error('Error importando productos de facturas: ' + error.message);
+      }
+
+      const counts = [
+        `${backup.data.invoices?.length || 0} facturas`,
+        `${backup.data.clients?.length || 0} clientes`,
+        `${backup.data.products?.length || 0} productos`
+      ].join(', ');
+
+      toast.success(`Datos restaurados y corregidos: ${counts}. Recargando...`);
+      setTimeout(() => window.location.reload(), 2000);
+      
+    } catch (error: any) {
       console.error('Error importing data:', error);
-      toast.error('Error al importar los datos');
+      toast.error('Fallo en la importación: ' + (error.message || 'Error desconocido'));
     } finally {
       setImporting(false);
-      if (importFileInputRef.current) {
-        importFileInputRef.current.value = '';
-      }
+      if (importFileInputRef.current) importFileInputRef.current.value = '';
     }
   };
 
@@ -176,10 +207,14 @@ export const SettingsPage = ({ open, onOpenChange, clients, onRefetchClients }: 
 
     setDeleting(true);
     try {
-      // Delete all data in order
       await supabase.from('invoice_products').delete().neq('id', '00000000-0000-0000-0000-000000000000');
       await supabase.from('invoices').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-      await supabase.from('clients').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      
+      await Promise.all([
+        supabase.from('clients').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        supabase.from('products').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
+        supabase.from('sellers').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      ]);
       
       toast.success('Todos los datos han sido eliminados. Recarga la página.');
       setTimeout(() => window.location.reload(), 1500);

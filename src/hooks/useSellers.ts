@@ -93,13 +93,6 @@ export const useSellers = () => {
 
   const deleteSeller = async (id: string): Promise<boolean> => {
     try {
-      // Check if this is the default seller
-      const seller = sellers.find(s => s.id === id);
-      if (seller?.is_default) {
-        toast.error('No puedes eliminar el vendedor predeterminado');
-        return false;
-      }
-
       const { error } = await supabase.from('sellers').delete().eq('id', id);
 
       if (error) throw error;

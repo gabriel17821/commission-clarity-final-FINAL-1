@@ -54,7 +54,9 @@ const Index = () => {
       0
     );
 
-    const restAmount = Math.max(0, totalInvoice - specialProductsTotal);
+    // FIX: El total digitado NO incluye los productos variables, por lo tanto
+    // el resto es igual al total digitado (totalInvoice).
+    const restAmount = totalInvoice;
     const restCommission = restAmount * (restPercentage / 100);
 
     const totalCommission =
@@ -82,8 +84,15 @@ const Index = () => {
       commission: b.commission,
     }));
 
+    // FIX: Calculamos el total real sumando el total digitado (resto) + productos
+    const specialProductsTotal = Object.values(productAmounts).reduce(
+      (sum, amount) => sum + amount,
+      0
+    );
+    const totalReal = totalInvoice + specialProductsTotal;
+
     const result = await saveInvoice(
-      ncf, invoiceDate, totalInvoice, calculations.restAmount, restPercentage,
+      ncf, invoiceDate, totalReal, calculations.restAmount, restPercentage,
       calculations.restCommission, calculations.totalCommission, productBreakdown, clientId
     );
 

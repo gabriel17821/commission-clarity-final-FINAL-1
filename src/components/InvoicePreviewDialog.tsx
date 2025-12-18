@@ -39,7 +39,8 @@ export const InvoicePreviewDialog = ({
   loading,
   data,
 }: InvoicePreviewDialogProps) => {
-  const hasProducts = data.breakdown.length > 0;
+  // CORRECCIÓN: Filtrar solo los productos que tienen un monto mayor a 0
+  const activeProducts = data.breakdown.filter(item => item.amount > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,30 +87,36 @@ export const InvoicePreviewDialog = ({
               <div className="col-span-3 text-right">Comisión</div>
             </div>
 
-            {/* Product Rows */}
+            {/* Product Rows - USANDO LA LISTA FILTRADA */}
             <div className="divide-y divide-border/50">
-              {data.breakdown.map((item, index) => (
-                <div key={index} className="grid grid-cols-12 gap-2 py-3 items-center">
-                  <div className="col-span-5 flex items-center gap-2">
-                    <span 
-                      className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    />
-                    <span className="font-medium text-foreground text-sm">{item.name}</span>
+              {activeProducts.length > 0 ? (
+                activeProducts.map((item, index) => (
+                  <div key={index} className="grid grid-cols-12 gap-2 py-3 items-center">
+                    <div className="col-span-5 flex items-center gap-2">
+                      <span 
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <span className="font-medium text-foreground text-sm">{item.name}</span>
+                    </div>
+                    <div className="col-span-2 text-center">
+                      <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-muted text-xs font-bold text-muted-foreground">
+                        {item.percentage}%
+                      </span>
+                    </div>
+                    <div className="col-span-2 text-right text-sm text-muted-foreground">
+                      ${formatNumber(item.amount)}
+                    </div>
+                    <div className="col-span-3 text-right text-sm font-semibold text-success">
+                      ${formatCurrency(item.commission)}
+                    </div>
                   </div>
-                  <div className="col-span-2 text-center">
-                    <span className="inline-flex items-center justify-center px-2 py-0.5 rounded bg-muted text-xs font-bold text-muted-foreground">
-                      {item.percentage}%
-                    </span>
-                  </div>
-                  <div className="col-span-2 text-right text-sm text-muted-foreground">
-                    ${formatNumber(item.amount)}
-                  </div>
-                  <div className="col-span-3 text-right text-sm font-semibold text-success">
-                    ${formatCurrency(item.commission)}
-                  </div>
+                ))
+              ) : (
+                <div className="py-4 text-center text-sm text-muted-foreground italic">
+                  Ningún producto del catálogo en esta factura
                 </div>
-              ))}
+              )}
 
               {/* Rest Row */}
               {data.restAmount > 0 && (

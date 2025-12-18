@@ -20,6 +20,8 @@ export interface Invoice {
   total_commission: number;
   created_at: string;
   invoice_date: string;
+  client_id: string | null;
+  seller_id: string | null;
   products?: InvoiceProduct[];
 }
 
@@ -51,7 +53,7 @@ export const useInvoices = () => {
       })
     );
 
-    setInvoices(invoicesWithProducts);
+    setInvoices(invoicesWithProducts as Invoice[]);
     setLoading(false);
   };
 
@@ -68,7 +70,8 @@ export const useInvoices = () => {
     restCommission: number,
     totalCommission: number,
     products: { name: string; amount: number; percentage: number; commission: number }[],
-    clientId?: string
+    clientId?: string,
+    sellerId?: string
   ) => {
     // Check if NCF already exists
     const { data: existing } = await supabase
@@ -93,6 +96,7 @@ export const useInvoices = () => {
         rest_commission: restCommission,
         total_commission: totalCommission,
         client_id: clientId || null,
+        seller_id: sellerId || null,
       })
       .select()
       .single();
@@ -129,7 +133,7 @@ export const useInvoices = () => {
     return invoice;
   };
 
-const deleteInvoice = async (id: string) => {
+  const deleteInvoice = async (id: string) => {
     const { error } = await supabase
       .from('invoices')
       .delete()
@@ -156,7 +160,8 @@ const deleteInvoice = async (id: string) => {
     restCommission: number,
     totalCommission: number,
     products: { name: string; amount: number; percentage: number; commission: number }[],
-    clientId?: string | null
+    clientId?: string | null,
+    sellerId?: string | null
   ) => {
     // Check if NCF already exists (excluding current invoice)
     const { data: existing } = await supabase
@@ -171,9 +176,7 @@ const deleteInvoice = async (id: string) => {
       return null;
     }
 
-    const { data: invoice, error: invoiceError } = await supabase
-      .from('invoices')
-      .update({
+    const updates: any = {
         ncf,
         invoice_date: invoiceDate,
         total_amount: totalAmount,
@@ -182,7 +185,15 @@ const deleteInvoice = async (id: string) => {
         rest_commission: restCommission,
         total_commission: totalCommission,
         client_id: clientId,
-      })
+    };
+
+    if (sellerId !== undefined) {
+        updates.seller_id = sellerId;
+    }
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('invoices')
+      .update(updates)
       .eq('id', id)
       .select()
       .single();

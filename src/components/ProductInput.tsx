@@ -3,6 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { formatCurrency } from "@/lib/formatters";
+import { useState, useEffect } from "react";
 
 interface ProductInputProps {
   label: string;
@@ -23,6 +24,24 @@ export const ProductInput = ({
   onDelete,
   canDelete = false 
 }: ProductInputProps) => {
+  // Estado local para manejar el input de texto y permitir decimales fluidamente
+  const [localValue, setLocalValue] = useState(value > 0 ? value.toString() : "");
+
+  // Sincronizar si el valor externo cambia (ej. al resetear)
+  useEffect(() => {
+    if (value === 0 && localValue !== "" && localValue !== "0") {
+      setLocalValue("");
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.replace(/[^0-9.]/g, '');
+    if ((raw.match(/\./g) || []).length > 1) return;
+    
+    setLocalValue(raw);
+    onChange(parseFloat(raw) || 0);
+  };
+
   const commission = value * (percentage / 100);
 
   return (
@@ -56,12 +75,12 @@ export const ProductInput = ({
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">$</span>
             <Input
-              type="number"
-              min={0}
-              value={value || ""}
-              onChange={(e) => onChange(Number(e.target.value) || 0)}
+              type="text"
+              inputMode="decimal"
+              value={localValue}
+              onChange={handleChange}
               className="w-32 pl-7 text-right font-medium"
-              placeholder="0"
+              placeholder="0.00"
             />
           </div>
           {value > 0 && (

@@ -33,7 +33,8 @@ interface InvoiceHistoryProps {
     restPercentage: number,
     restCommission: number,
     totalCommission: number,
-    products: { name: string; amount: number; percentage: number; commission: number }[]
+    products: { name: string; amount: number; percentage: number; commission: number }[],
+    clientId?: string | null // Aseguramos que acepte el cliente
   ) => Promise<any>;
   clients: Client[];
   products: Product[];
@@ -59,7 +60,7 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
     return Array.from(uniqueMonths).sort().reverse();
   }, [invoices]);
 
-  // Get clients that have invoices
+  // Obtener solo los clientes que tienen facturas para el filtro
   const clientsWithInvoices = useMemo(() => {
     const clientIds = new Set(invoices.map(inv => (inv as any).client_id).filter(Boolean));
     return clients.filter(c => clientIds.has(c.id));
@@ -313,10 +314,16 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           <span className="text-xs font-bold text-primary">#{filteredInvoices.length - index}</span>
                         </div>
                         <div>
-                          {clientName && (
+                          {clientName ? (
                             <div className="flex items-center gap-1.5 mb-0.5">
                               <User className="h-3 w-3 text-primary" />
                               <span className="font-semibold text-sm text-foreground">{clientName}</span>
+                            </div>
+                          ) : (
+                            // Muestra visual si no tiene cliente, aunque no es clickeable aquí
+                            <div className="flex items-center gap-1.5 mb-0.5 opacity-50">
+                              <User className="h-3 w-3" />
+                              <span className="text-sm italic">Sin cliente asignado</span>
                             </div>
                           )}
                           <span className="font-mono text-xs text-muted-foreground">{invoice.ncf}</span>
@@ -336,9 +343,14 @@ export const InvoiceHistory = ({ invoices, loading, onDelete, onUpdateInvoice, c
                           <p className="font-bold text-success">${formatCurrency(invoice.total_commission)}</p>
                         </div>
                         <div className="flex items-center gap-1">
+                          {/* AQUI ESTABA EL ERROR POTENCIAL:
+                             Se pasan TODOS los clientes disponibles (props.clients), 
+                             así el modal puede mostrar la lista completa para asignar
+                             a facturas que no tenían cliente.
+                          */}
                           <EditInvoiceDialog
                             invoice={invoice}
-                            clients={clients}
+                            clients={clients} 
                             onUpdate={onUpdateInvoice}
                             onDelete={onDelete}
                             trigger={

@@ -1,640 +1,758 @@
 import { useMemo, useState } from 'react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { 
-  TrendingUp, TrendingDown, DollarSign, Receipt, ChevronLeft, ChevronRight, 
-  FileText, Users, Package, ArrowUpRight, ArrowDownRight, Crown, ShoppingBag,
-  BarChart3, Building2, UserCircle, Eye, ChevronDown, ChevronUp
+  TrendingUp, DollarSign, Receipt, ChevronLeft, ChevronRight, 
+  FileText, ArrowUpRight, ArrowDownRight, BarChart3, Activity,
+  PieChart, Target, CalendarDays, Maximize2, Trophy, Lightbulb, TrendingDown, Download, Crown,
+  ShoppingBag, Repeat, Users, Star, Briefcase
 } from 'lucide-react';
 import { Invoice } from '@/hooks/useInvoices';
-import { Client } from '@/hooks/useClients';
-import { formatCurrency, formatNumber, parseDateSafe } from '@/lib/formatters';
-import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, addMonths, isSameMonth, getDaysInMonth, getDate } from 'date-fns';
+import { formatCurrency, formatNumber } from '@/lib/formatters';
+import { format, startOfMonth, endOfMonth, isWithinInterval, subMonths, addMonths, startOfYear, endOfYear, getYear, isSameDay } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { generateMonthlyPDF } from '@/lib/pdfGenerator';
+import { Button } from '@/components/ui/button';
+import { generateMonthlyPDF, generateAnnualPDF } from '@/lib/pdfGenerator';
 import { toast } from 'sonner';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip, BarChart, Bar } from 'recharts';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip as RechartsTooltip, Cell } from 'recharts';
 
-interface AdvancedStatisticsProps {
+interface StatisticsProps {
   invoices: Invoice[];
   sellerName?: string;
-  clients?: Client[];
+  clients?: any[];
 }
 
-interface ProductSummary {
-  name: string;
-  totalAmount: number;
-  totalCommission: number;
-  dlsCommission: number;
-  sellerCommission: number;
-  percentage: number;
-  invoiceCount: number;
-}
+const parseInvoiceDate = (dateString: string | null | undefined): Date => {
+  if (!dateString) return new Date();
+  try {
+    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      const [year, month, day] = dateString.split('-').map(Number);
+      return new Date(year, month - 1, day, 12, 0, 0);
+    }
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return new Date();
+    date.setHours(12, 0, 0, 0);
+    return date;
+  } catch (e) {
+    return new Date();
+  }
+};
 
-interface ClientSummary {
-  id: string;
-  name: string;
-  invoiceCount: number;
-  totalAmount: number;
-  totalCommission: number;
-  products: Record<string, number>;
-}
-
-export const AdvancedStatistics = ({ invoices, sellerName, clients = [] }: AdvancedStatisticsProps) => {
+export const AdvancedStatistics = ({ invoices, sellerName, clients = [] }: StatisticsProps) => {
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showProductDetail, setShowProductDetail] = useState(false);
-  const [expandedClient, setExpandedClient] = useState<string | null>(null);
-  const displayName = sellerName || 'NEFTALÍ';
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [viewMode, setViewMode] = useState<'month' | 'year'>('month');
 
-  // DLS commission rate (configurable)
-  const DLS_COMMISSION_RATE = 0.75; // 75% goes to DLS
-  const SELLER_COMMISSION_RATE = 0.25; // 25% goes to seller
+  const [selectedDayInvoices, setSelectedDayInvoices] = useState<Invoice[]>([]);
+  const [selectedDayDate, setSelectedDayDate] = useState<Date | null>(null);
+  const [isDayDialogOpen, setIsDayDialogOpen] = useState(false);
 
-  const stats = useMemo(() => {
+  const [selectedMonthDetail, setSelectedMonthDetail] = useState<any>(null);
+  const [isMonthDialogOpen, setIsMonthDialogOpen] = useState(false);
+
+  const [isRangeExportOpen, setIsRangeExportOpen] = useState(false);
+  const [rangeStartMonth, setRangeStartMonth] = useState<string>('0');
+  const [rangeEndMonth, setRangeEndMonth] = useState<string>('11');
+
+  const [recordInvoice, setRecordInvoice] = useState<Invoice | null>(null);
+  const [isRecordDialogOpen, setIsRecordDialogOpen] = useState(false);
+
+  const safeInvoices = invoices || [];
+
+  const firstName = useMemo(() => {
+    return sellerName ? sellerName.split(' ')[0] : 'Neftalí';
+  }, [sellerName]);
+
+  const availableYears = useMemo(() => {
+    const years = new Set<number>();
+    const currentYear = new Date().getFullYear();
+    for (let i = -1; i <= 5; i++) years.add(currentYear - i);
+    safeInvoices.forEach(inv => {
+      const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+      years.add(getYear(date));
+    });
+    return Array.from(years).sort((a, b) => b - a);
+  }, [safeInvoices]);
+
+  const selectedMonthStats = useMemo(() => {
     const start = startOfMonth(selectedDate);
     const end = endOfMonth(selectedDate);
-    
-    const monthInvoices = invoices.filter(inv => {
-      const date = parseDateSafe(inv.invoice_date || inv.created_at);
+    const monthInvoices = safeInvoices.filter(inv => {
+      const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
       return isWithinInterval(date, { start, end });
     });
 
-    // Products breakdown with DLS/Seller split
-    const productMap: Record<string, ProductSummary> = {};
-    let restTotal = 0;
-    let restCommission = 0;
-
-    monthInvoices.forEach(inv => {
-      inv.products?.forEach(product => {
-        const key = product.product_name;
-        if (!productMap[key]) {
-          productMap[key] = {
-            name: product.product_name,
-            totalAmount: 0,
-            totalCommission: 0,
-            dlsCommission: 0,
-            sellerCommission: 0,
-            percentage: product.percentage,
-            invoiceCount: 0,
-          };
-        }
-        productMap[key].totalAmount += Number(product.amount);
-        productMap[key].totalCommission += Number(product.commission);
-        productMap[key].dlsCommission += Number(product.commission) * DLS_COMMISSION_RATE;
-        productMap[key].sellerCommission += Number(product.commission) * SELLER_COMMISSION_RATE;
-        productMap[key].invoiceCount += 1;
-      });
-      restTotal += Number(inv.rest_amount);
-      restCommission += Number(inv.rest_commission);
-    });
-
-    if (restTotal > 0) {
-      productMap['Resto'] = {
-        name: 'Resto',
-        totalAmount: restTotal,
-        totalCommission: restCommission,
-        dlsCommission: restCommission * DLS_COMMISSION_RATE,
-        sellerCommission: restCommission * SELLER_COMMISSION_RATE,
-        percentage: 25,
-        invoiceCount: monthInvoices.length,
-      };
-    }
-
-    const productBreakdown = Object.values(productMap).sort((a, b) => b.totalCommission - a.totalCommission);
-
-    // Client breakdown with product details
-    const clientMap: Record<string, ClientSummary> = {};
-    monthInvoices.forEach(inv => {
-      const invWithClient = inv as any;
-      const clientId = invWithClient.client_id || 'unknown';
-      const clientData = invWithClient.clients;
-      const clientName = clientData?.name || 'Sin cliente';
-      
-      if (!clientMap[clientId]) {
-        clientMap[clientId] = {
-          id: clientId,
-          name: clientName,
-          invoiceCount: 0,
-          totalAmount: 0,
-          totalCommission: 0,
-          products: {},
+    const daysInMonth = end.getDate();
+    const dailyData = Array.from({ length: daysInMonth }, (_, i) => {
+        const dayNum = i + 1;
+        const date = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), dayNum);
+        return { 
+            day: dayNum, 
+            date, 
+            sales: 0, 
+            commission: 0, 
+            count: 0,
+            label: format(date, 'd', { locale: es }),
+            tooltipLabel: format(date, "EEEE d 'de' MMMM", { locale: es })
         };
-      }
-      clientMap[clientId].invoiceCount += 1;
-      clientMap[clientId].totalAmount += Number(inv.total_amount);
-      clientMap[clientId].totalCommission += Number(inv.total_commission);
-
-      // Track products per client
-      inv.products?.forEach(product => {
-        if (!clientMap[clientId].products[product.product_name]) {
-          clientMap[clientId].products[product.product_name] = 0;
-        }
-        clientMap[clientId].products[product.product_name] += Number(product.amount);
-      });
     });
 
-    const clientBreakdown = Object.values(clientMap).sort((a, b) => b.totalCommission - a.totalCommission);
+    // Client analysis for the month
+    const clientStats: Record<string, { name: string, invoices: number, amount: number, commission: number }> = {};
 
-    // Daily data for chart
-    const daysInMonth = getDaysInMonth(selectedDate);
-    const dailyData: { day: number; date: string; ventas: number; comision: number; facturas: number }[] = [];
-    
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dayInvoices = monthInvoices.filter(inv => {
-        const date = parseDateSafe(inv.invoice_date || inv.created_at);
-        return getDate(date) === day;
-      });
-      dailyData.push({
-        day,
-        date: `${day}`,
-        ventas: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0),
-        comision: dayInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0),
-        facturas: dayInvoices.length,
-      });
-    }
+    monthInvoices.forEach(inv => {
+        const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+        const dayIndex = date.getDate() - 1;
+        if (dailyData[dayIndex]) {
+            dailyData[dayIndex].sales += Number(inv.total_amount || 0);
+            dailyData[dayIndex].commission += Number(inv.total_commission || 0);
+            dailyData[dayIndex].count += 1;
+        }
 
-    const bestDay = dailyData.reduce((best, current) => 
-      current.comision > best.comision ? current : best
-    , dailyData[0]);
+        // Process client stats
+        const invWithClient = inv as any;
+        const clientId = invWithClient.client_id || 'unknown';
+        if (clientId !== 'unknown') {
+            if (!clientStats[clientId]) {
+                // FIX: Look up client name from the clients array passed as prop
+                const clientInfo = clients?.find(c => c.id === clientId);
+                const clientName = clientInfo?.name || invWithClient.clients?.name || 'Cliente';
+                
+                clientStats[clientId] = { 
+                    name: clientName, 
+                    invoices: 0, 
+                    amount: 0, 
+                    commission: 0 
+                };
+            }
+            clientStats[clientId].invoices += 1;
+            clientStats[clientId].amount += Number(inv.total_amount);
+            clientStats[clientId].commission += Number(inv.total_commission);
+        }
+    });
 
-    const totalCommission = monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0);
+    const maxCommissionDay = Math.max(...dailyData.map(d => d.commission), 1);
+    const bestDay = dailyData.reduce((prev, current) => (prev.commission > current.commission) ? prev : current, dailyData[0]);
+
+    // Find top clients
+    const clientsArray = Object.values(clientStats);
+    const topCommissionClient = [...clientsArray].sort((a, b) => b.commission - a.commission)[0];
+    const frequentClient = [...clientsArray].sort((a, b) => b.invoices - a.invoices)[0];
+    const topSalesClient = [...clientsArray].sort((a, b) => b.amount - a.amount)[0];
+    const highestTicketClient = [...clientsArray].sort((a, b) => (b.amount / b.invoices) - (a.amount / a.invoices))[0];
 
     return {
-      totalSales: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0),
-      totalCommission,
-      dlsCommission: totalCommission * DLS_COMMISSION_RATE,
-      sellerCommission: totalCommission * SELLER_COMMISSION_RATE,
+      totalSales: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0),
+      totalCommission: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission || 0), 0),
       invoiceCount: monthInvoices.length,
       invoices: monthInvoices,
-      avgPerInvoice: monthInvoices.length > 0 ? totalCommission / monthInvoices.length : 0,
-      productBreakdown,
-      clientBreakdown,
-      dailyData,
-      bestDay,
-      uniqueClients: new Set(monthInvoices.map(inv => (inv as any).client_id).filter(Boolean)).size,
-      topClient: clientBreakdown[0] || null,
-      topBuyer: clientBreakdown.sort((a, b) => b.totalAmount - a.totalAmount)[0] || null,
+      avgPerInvoice: monthInvoices.length > 0 ? monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission || 0), 0) / monthInvoices.length : 0,
+      dailyData, maxCommissionDay, bestDay,
+      topCommissionClient,
+      frequentClient,
+      topSalesClient,
+      highestTicketClient
     };
-  }, [invoices, selectedDate, DLS_COMMISSION_RATE, SELLER_COMMISSION_RATE]);
+  }, [safeInvoices, selectedDate, clients]); // Added clients to dependency array
 
-  // Previous month for comparison
-  const prevStats = useMemo(() => {
+  const yearStats = useMemo(() => {
+    const start = startOfYear(new Date(selectedYear, 0, 1));
+    const end = endOfYear(new Date(selectedYear, 0, 1));
+    const yearInvoices = safeInvoices.filter(inv => {
+      const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+      return isWithinInterval(date, { start, end });
+    });
+
+    const monthlyData = Array.from({ length: 12 }, (_, i) => {
+        const date = new Date(selectedYear, i, 15);
+        return {
+            month: i,
+            label: format(date, 'MMMM', { locale: es }),
+            shortLabel: format(date, 'MMM', { locale: es }),
+            commission: 0, sales: 0, count: 0, growth: 0,
+            products: new Map<string, { sales: number, commission: number }>() 
+        };
+    });
+
+    yearInvoices.forEach(inv => {
+        const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+        const monthIndex = date.getMonth();
+        if (monthlyData[monthIndex]) {
+            const m = monthlyData[monthIndex];
+            m.commission += Number(inv.total_commission || 0);
+            m.sales += Number(inv.total_amount || 0);
+            m.count += 1;
+            inv.products?.forEach(p => {
+                const existing = m.products.get(p.product_name) || { sales: 0, commission: 0 };
+                m.products.set(p.product_name, { sales: existing.sales + Number(p.amount || 0), commission: existing.commission + Number(p.commission || 0) });
+            });
+            if (inv.rest_amount > 0) {
+                const existing = m.products.get('Resto de Productos') || { sales: 0, commission: 0 };
+                m.products.set('Resto de Productos', { sales: existing.sales + Number(inv.rest_amount || 0), commission: existing.commission + Number(inv.rest_commission || 0) });
+            }
+        }
+    });
+
+    const enrichedMonthlyData = monthlyData.map((m, i) => {
+        const previous = i > 0 ? monthlyData[i - 1].commission : 0;
+        const growth = previous > 0 ? ((m.commission - previous) / previous) * 100 : 0;
+        const productRanking = Array.from(m.products.entries()).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.commission - a.commission);
+        return { ...m, growth, productRanking };
+    });
+
+    const maxCommissionMonth = Math.max(...enrichedMonthlyData.map(m => m.commission), 1);
+
+    return {
+      totalSales: yearInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0),
+      totalCommission: yearInvoices.reduce((sum, inv) => sum + Number(inv.total_commission || 0), 0),
+      invoiceCount: yearInvoices.length,
+      monthlyData: enrichedMonthlyData,
+      maxCommissionMonth
+    };
+  }, [safeInvoices, selectedYear]);
+
+  // Previous year stats for growth calculation
+  const prevYearStats = useMemo(() => {
+    const prevYear = selectedYear - 1;
+    const start = startOfYear(new Date(prevYear, 0, 1));
+    const end = endOfYear(new Date(prevYear, 0, 1));
+    const yearInvoices = safeInvoices.filter(inv => {
+      const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+      return isWithinInterval(date, { start, end });
+    });
+    return {
+        totalSales: yearInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0),
+    };
+  }, [safeInvoices, selectedYear]);
+
+  const annualSalesGrowth = useMemo(() => {
+    if (prevYearStats.totalSales === 0) return 100;
+    return ((yearStats.totalSales - prevYearStats.totalSales) / prevYearStats.totalSales) * 100;
+  }, [yearStats.totalSales, prevYearStats.totalSales]);
+
+  const previousMonthStats = useMemo(() => {
     const prevDate = subMonths(selectedDate, 1);
     const start = startOfMonth(prevDate);
     const end = endOfMonth(prevDate);
-    
-    const monthInvoices = invoices.filter(inv => {
-      const date = parseDateSafe(inv.invoice_date || inv.created_at);
-      return isWithinInterval(date, { start, end });
+    const monthInvoices = safeInvoices.filter(inv => {
+        const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+        return isWithinInterval(date, { start, end });
+    });
+    return {
+      totalCommission: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission || 0), 0),
+      totalSales: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0),
+      invoiceCount: monthInvoices.length
+    };
+  }, [safeInvoices, selectedDate]);
+
+  const smartAnalysis = useMemo(() => {
+    const currentBreakdown: Record<string, { commission: number, sales: number }> = {};
+    let restCommission = 0; let restSales = 0;
+    let maxInvoiceObj: Invoice | null = null;
+    let maxAmount = 0;
+
+    selectedMonthStats.invoices.forEach(inv => {
+      restCommission += Number(inv.rest_commission || 0);
+      restSales += Number(inv.rest_amount || 0);
+      
+      if (Number(inv.total_amount || 0) > maxAmount) {
+        maxAmount = Number(inv.total_amount || 0);
+        maxInvoiceObj = inv;
+      }
+
+      inv.products?.forEach(prod => {
+        if (!currentBreakdown[prod.product_name]) currentBreakdown[prod.product_name] = { commission: 0, sales: 0 };
+        currentBreakdown[prod.product_name].commission += Number(prod.commission || 0);
+        currentBreakdown[prod.product_name].sales += Number(prod.amount || 0);
+      });
     });
 
-    return {
-      totalSales: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_amount), 0),
-      totalCommission: monthInvoices.reduce((sum, inv) => sum + Number(inv.total_commission), 0),
-      invoiceCount: monthInvoices.length,
-      uniqueClients: new Set(monthInvoices.map(inv => (inv as any).client_id).filter(Boolean)).size,
-    };
-  }, [invoices, selectedDate]);
+    const ranking = [
+      { name: 'Resto de productos', type: 'rest', commission: restCommission, sales: restSales },
+      ...Object.entries(currentBreakdown).map(([name, data]) => ({
+        name, type: 'product', commission: data.commission, sales: data.sales
+      }))
+    ].sort((a, b) => b.commission - a.commission);
 
-  const getChange = (current: number, previous: number) => {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return ((current - previous) / previous) * 100;
-  };
-
-  const commissionChange = getChange(stats.totalCommission, prevStats.totalCommission);
-  const salesChange = getChange(stats.totalSales, prevStats.totalSales);
-  const invoiceChange = getChange(stats.invoiceCount, prevStats.invoiceCount);
-  const clientChange = getChange(stats.uniqueClients, prevStats.uniqueClients);
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setSelectedDate(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1));
-  };
-
-  const monthLabel = format(selectedDate, "MMMM yyyy", { locale: es });
-  const capitalizedMonth = monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1);
-
-  const handleDownloadPdf = () => {
-    generateMonthlyPDF(stats.invoices, capitalizedMonth);
-    toast.success('PDF generado correctamente');
-  };
-
-  const totalProductCommission = stats.productBreakdown.reduce((sum, p) => sum + p.totalCommission, 0);
-
-  const ChangeIndicator = ({ value, size = 'sm' }: { value: number; size?: 'sm' | 'lg' }) => {
-    const isPositive = value >= 0;
-    const Icon = isPositive ? ArrowUpRight : ArrowDownRight;
-    const sizeClasses = size === 'lg' ? 'text-sm px-2.5 py-1' : 'text-xs px-2 py-0.5';
+    const totalComm = selectedMonthStats.totalCommission || 1;
+    const winner = ranking[0];
+    const secondPlace = ranking[1];
     
-    if (value === 0) return null;
+    let narrative = "";
+    const monthName = format(selectedDate, 'MMMM', { locale: es });
     
-    return (
-      <span className={`inline-flex items-center gap-0.5 rounded-full font-medium ${sizeClasses} ${
-        isPositive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
-      }`}>
-        <Icon className={size === 'lg' ? 'h-4 w-4' : 'h-3 w-3'} />
-        {Math.abs(value).toFixed(0)}%
-      </span>
-    );
+    if (selectedMonthStats.invoiceCount === 0) {
+      narrative = "No hay suficiente actividad registrada este mes para generar un análisis estratégico.";
+    } else {
+      narrative = `En el mes de ${monthName}, se logró un total de ventas para DLS de $${formatNumber(selectedMonthStats.totalSales)}. El mayor rendimiento provino de `;
+      if (winner) {
+        narrative += `"${winner.name}", que generó $${formatNumber(winner.commission)} en comisiones para ${firstName}. `;
+        if (winner.type === 'rest') narrative += `Es notable que la categoría "Resto de productos" lidera, debido a que acumula el 25% de los productos de las facturas. `;
+      }
+      narrative += `En promedio, cada factura generó una ganancia de comisiones para ${firstName} de $${formatNumber(Math.round(selectedMonthStats.avgPerInvoice))} en este mes.`;
+    }
+
+    return { ranking, totalComm, winner, secondPlace, narrative, maxInvoiceObj };
+  }, [selectedMonthStats, selectedDate, firstName]);
+
+  const commChange = {
+    percent: previousMonthStats.totalCommission === 0 ? 0 : Math.abs(((selectedMonthStats.totalCommission - previousMonthStats.totalCommission) / previousMonthStats.totalCommission) * 100).toFixed(1),
+    isPositive: selectedMonthStats.totalCommission >= previousMonthStats.totalCommission
+  };
+  const salesChange = {
+    percent: previousMonthStats.totalSales === 0 ? 0 : Math.abs(((selectedMonthStats.totalSales - previousMonthStats.totalSales) / previousMonthStats.totalSales) * 100).toFixed(1),
+    isPositive: selectedMonthStats.totalSales >= previousMonthStats.totalSales
+  };
+  const invoiceChange = {
+    percent: previousMonthStats.invoiceCount === 0 ? 0 : Math.abs(((selectedMonthStats.invoiceCount - previousMonthStats.invoiceCount) / previousMonthStats.invoiceCount) * 100).toFixed(1),
+    isPositive: selectedMonthStats.invoiceCount >= previousMonthStats.invoiceCount
   };
 
-  if (invoices.length === 0) {
-    return (
-      <Card className="p-16 text-center">
-        <div className="h-16 w-16 rounded-2xl bg-muted mx-auto mb-6 flex items-center justify-center">
-          <BarChart3 className="h-8 w-8 text-muted-foreground" />
-        </div>
-        <h3 className="font-semibold text-xl text-foreground mb-2">Sin datos aún</h3>
-        <p className="text-muted-foreground">Guarda tu primera factura para ver las estadísticas</p>
-      </Card>
-    );
-  }
+  const handleDayClick = (dayData: any) => {
+    if (dayData.count === 0) return;
+    const invoicesForDay = safeInvoices.filter(inv => isSameDay(parseInvoiceDate(inv.invoice_date || inv.created_at), dayData.date));
+    setSelectedDayInvoices(invoicesForDay);
+    setSelectedDayDate(dayData.date);
+    setIsDayDialogOpen(true);
+  };
+
+  const handleMonthClick = (monthData: any) => {
+    if (monthData.count === 0) return;
+    setSelectedMonthDetail(monthData);
+    setIsMonthDialogOpen(true);
+  };
+
+  const handleRecordClick = () => {
+    if (smartAnalysis.maxInvoiceObj) {
+      setRecordInvoice(smartAnalysis.maxInvoiceObj);
+      setIsRecordDialogOpen(true);
+    }
+  };
+
+  const handleRangeExport = () => {
+    const start = parseInt(rangeStartMonth);
+    const end = parseInt(rangeEndMonth);
+    if (start > end) { toast.error('El mes de inicio no puede ser mayor al final.'); return; }
+    const startDate = new Date(selectedYear, start, 1);
+    const endDate = endOfMonth(new Date(selectedYear, end, 1));
+    const filteredInvoices = safeInvoices.filter(inv => {
+      const date = parseInvoiceDate(inv.invoice_date || inv.created_at);
+      return isWithinInterval(date, { start: startDate, end: endDate });
+    });
+    const label = `${format(startDate, 'MMMM', { locale: es })} - ${format(endDate, 'MMMM yyyy', { locale: es })}`;
+    generateAnnualPDF(selectedYear, filteredInvoices, sellerName || 'Neftalí Jiménez', label);
+    toast.success('Reporte generado correctamente');
+    setIsRangeExportOpen(false);
+  };
+
+  const renderProductList = (invoice: Invoice) => {
+    const items = [];
+    if (invoice.products && invoice.products.length > 0) invoice.products.forEach(p => items.push(`${p.product_name} ($${formatNumber(p.amount || 0)})`));
+    if (invoice.rest_amount > 0) items.push(`Resto ($${formatNumber(invoice.rest_amount || 0)})`);
+    return items.length ? items.join(', ') : "Sin desglose";
+  };
+
+  const monthOptions = Array.from({ length: 12 }, (_, i) => ({ value: i.toString(), label: format(new Date(2024, i, 15), 'MMMM', { locale: es }) }));
+
+  const monthlyChartData = yearStats.monthlyData.map(m => ({
+    name: m.shortLabel,
+    comision: m.commission,
+    ventas: m.sales,
+    fullLabel: m.label,
+    count: m.count
+  }));
 
   return (
-    <TooltipProvider>
-      <div className="space-y-6 animate-fade-in">
-        {/* Header with Navigation */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigateMonth('prev')} className="h-9 w-9 rounded-xl">
-              <ChevronLeft className="h-5 w-5" />
-            </Button>
-            <div className="min-w-[200px] text-center">
-              <h2 className="text-2xl font-bold text-foreground">{capitalizedMonth}</h2>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={() => navigateMonth('next')} 
-              disabled={isSameMonth(selectedDate, new Date())} 
-              className="h-9 w-9 rounded-xl"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </Button>
-          </div>
-          <Button variant="outline" size="sm" onClick={handleDownloadPdf} className="gap-2 rounded-xl">
-            <FileText className="h-4 w-4" />
-            Exportar PDF
-          </Button>
-        </div>
-
-        {/* Main KPI Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Commission Card - Hero */}
-          <Card className="p-5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white col-span-2 lg:col-span-1">
-            <div className="flex items-start justify-between mb-3">
-              <div className="h-10 w-10 rounded-xl bg-white/20 flex items-center justify-center">
-                <DollarSign className="h-5 w-5" />
-              </div>
-              <ChangeIndicator value={commissionChange} size="lg" />
-            </div>
-            <p className="text-sm font-medium text-white/80 mb-1">Comisión Total</p>
-            <p className="text-3xl font-black">${formatCurrency(stats.totalCommission)}</p>
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-white/20 text-xs">
-              <span className="flex items-center gap-1">
-                <Building2 className="h-3.5 w-3.5" /> DLS: ${formatCurrency(stats.dlsCommission)}
-              </span>
-              <span className="flex items-center gap-1">
-                <UserCircle className="h-3.5 w-3.5" /> {displayName}: ${formatCurrency(stats.sellerCommission)}
-              </span>
-            </div>
-          </Card>
-
-          {/* Sales */}
-          <Card className="p-5 hover:shadow-lg transition-shadow">
-            <div className="flex items-start justify-between mb-3">
-              <div className="h-10 w-10 rounded-xl bg-blue-500/10 flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-blue-500" />
-              </div>
-              <ChangeIndicator value={salesChange} />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Ventas</p>
-            <p className="text-2xl font-black text-foreground">${formatNumber(stats.totalSales)}</p>
-          </Card>
-
-          {/* Invoices */}
-          <Card className="p-5 hover:shadow-lg transition-shadow">
-            <div className="flex items-start justify-between mb-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                <Receipt className="h-5 w-5 text-purple-500" />
-              </div>
-              <ChangeIndicator value={invoiceChange} />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Facturas</p>
-            <p className="text-2xl font-black text-foreground">{stats.invoiceCount}</p>
-            <p className="text-xs text-muted-foreground mt-1">Prom: ${formatCurrency(stats.avgPerInvoice)}</p>
-          </Card>
-
-          {/* Clients */}
-          <Card className="p-5 hover:shadow-lg transition-shadow">
-            <div className="flex items-start justify-between mb-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                <Users className="h-5 w-5 text-amber-500" />
-              </div>
-              <ChangeIndicator value={clientChange} />
-            </div>
-            <p className="text-sm font-medium text-muted-foreground mb-1">Clientes</p>
-            <p className="text-2xl font-black text-foreground">{stats.uniqueClients}</p>
-            <p className="text-xs text-muted-foreground mt-1">activos este mes</p>
-          </Card>
-        </div>
-
-        {/* Top Performers Row */}
-        {stats.invoiceCount > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Top Client by Commission */}
-            {stats.topClient && (
-              <Card className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-amber-200/50 dark:border-amber-800/50">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
-                    <Crown className="h-7 w-7 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wider">Mejor Rendimiento</p>
-                    <p className="font-bold text-lg text-foreground">{stats.topClient.name}</p>
-                    <div className="flex items-center gap-3 mt-1 text-sm">
-                      <span className="text-muted-foreground">{stats.topClient.invoiceCount} facturas</span>
-                      <span className="font-semibold text-success">${formatCurrency(stats.topClient.totalCommission)}</span>
-                    </div>
-                  </div>
+    <TooltipProvider delayDuration={0}>
+      <div className="space-y-8 animate-fade-in font-sans text-slate-800 dark:text-slate-100 pb-16">
+        {/* Controles de Navegación */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-white dark:bg-card border border-border shadow-sm">
+            <div className="flex items-center gap-3">
+                <div className="flex bg-muted/50 p-1.5 rounded-lg">
+                    <Button variant={viewMode === 'month' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('month')} className="h-9 text-sm font-medium">Mensual</Button>
+                    <Button variant={viewMode === 'year' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('year')} className="h-9 text-sm font-medium">Anual</Button>
                 </div>
-              </Card>
-            )}
-
-            {/* Top Buyer */}
-            {stats.topBuyer && (
-              <Card className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200/50 dark:border-blue-800/50">
-                <div className="flex items-center gap-4">
-                  <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-                    <ShoppingBag className="h-7 w-7 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Mayor Comprador</p>
-                    <p className="font-bold text-lg text-foreground">{stats.topBuyer.name}</p>
-                    <div className="flex items-center gap-3 mt-1 text-sm">
-                      <span className="text-muted-foreground">{stats.topBuyer.invoiceCount} facturas</span>
-                      <span className="font-semibold text-foreground">${formatNumber(stats.topBuyer.totalAmount)}</span>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            )}
-          </div>
-        )}
-
-        {/* Performance Chart */}
-        {stats.invoiceCount > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="font-bold text-lg text-foreground">Rendimiento Diario</h3>
-                <p className="text-sm text-muted-foreground">Comisiones generadas día a día</p>
-              </div>
-              {stats.bestDay && stats.bestDay.comision > 0 && (
-                <div className="text-right px-4 py-2 rounded-xl bg-success/10">
-                  <p className="text-xs text-success font-medium">Mejor día</p>
-                  <p className="font-bold text-success">{stats.bestDay.day} de {format(selectedDate, 'MMM', { locale: es })} • ${formatCurrency(stats.bestDay.comision)}</p>
-                </div>
-              )}
-            </div>
-            
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={stats.dailyData}>
-                  <defs>
-                    <linearGradient id="colorComision" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="hsl(var(--success))" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="hsl(var(--success))" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis 
-                    dataKey="date" 
-                    axisLine={false} 
-                    tickLine={false} 
-                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis hide />
-                  <RechartsTooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--card))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-                    }}
-                    formatter={(value: number, name: string) => [
-                      `$${name === 'comision' ? formatCurrency(value) : formatNumber(value)}`,
-                      name === 'comision' ? 'Comisión' : 'Ventas'
-                    ]}
-                    labelFormatter={(label) => `Día ${label}`}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="comision" 
-                    stroke="hsl(var(--success))" 
-                    strokeWidth={2.5}
-                    fill="url(#colorComision)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </Card>
-        )}
-
-        {/* Products & Clients Grid */}
-        {stats.invoiceCount > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Products Breakdown */}
-            <Card className="p-6">
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                    <Package className="h-5 w-5 text-purple-500" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-foreground">Productos</h3>
-                    <p className="text-xs text-muted-foreground">{stats.productBreakdown.length} productos vendidos</p>
-                  </div>
-                </div>
-                <Button variant="outline" size="sm" onClick={() => setShowProductDetail(true)} className="gap-1.5 rounded-xl">
-                  <Eye className="h-4 w-4" />
-                  Ver Detalle
-                </Button>
-              </div>
-              <div className="space-y-4">
-                {stats.productBreakdown.slice(0, 5).map((product, index) => {
-                  const percentage = totalProductCommission > 0 ? (product.totalCommission / totalProductCommission) * 100 : 0;
-                  const colors = ['bg-emerald-500', 'bg-blue-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500'];
-                  return (
-                    <div key={product.name}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full ${colors[index]}`} />
-                          <span className="text-sm font-medium text-foreground">{product.name}</span>
-                          <span className="text-xs text-muted-foreground">({product.percentage}%)</span>
-                        </div>
-                        <span className="text-sm font-bold text-success">${formatCurrency(product.totalCommission)}</span>
-                      </div>
-                      <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className={`h-full ${colors[index]} transition-all duration-500`} 
-                          style={{ width: `${percentage}%` }} 
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Card>
-
-            {/* Top Clients with expandable details */}
-            <Card className="p-6">
-              <div className="flex items-center gap-3 mb-5">
-                <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Users className="h-5 w-5 text-amber-500" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground">Top Clientes</h3>
-                  <p className="text-xs text-muted-foreground">Mejores clientes del mes</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                {stats.clientBreakdown.slice(0, 5).map((client, index) => {
-                  const isExpanded = expandedClient === client.id;
-                  return (
-                    <div key={client.id}>
-                      <button 
-                        onClick={() => setExpandedClient(isExpanded ? null : client.id)}
-                        className="w-full flex items-center justify-between p-3 rounded-xl bg-muted/30 hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                            {index + 1}
-                          </span>
-                          <div className="text-left">
-                            <p className="font-medium text-foreground text-sm">{client.name}</p>
-                            <p className="text-xs text-muted-foreground">{client.invoiceCount} factura{client.invoiceCount !== 1 ? 's' : ''}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <p className="font-bold text-success text-sm">${formatCurrency(client.totalCommission)}</p>
-                            <p className="text-xs text-muted-foreground">${formatNumber(client.totalAmount)}</p>
-                          </div>
-                          {isExpanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
-                        </div>
-                      </button>
-                      
-                      {/* Expanded product details */}
-                      {isExpanded && Object.keys(client.products).length > 0 && (
-                        <div className="ml-11 mt-2 p-3 rounded-lg bg-muted/20 border border-border/50 animate-in slide-in-from-top-2">
-                          <p className="text-xs font-medium text-muted-foreground mb-2">Productos comprados:</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            {Object.entries(client.products).map(([name, amount]) => (
-                              <div key={name} className="flex items-center justify-between text-xs">
-                                <span className="text-foreground">{name}</span>
-                                <span className="font-medium">${formatNumber(amount)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {stats.clientBreakdown.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">No hay clientes este mes</p>
+                {viewMode === 'month' && selectedMonthStats.invoiceCount > 0 && (
+                    <Button variant="outline" size="sm" className="h-9 gap-2 ml-2 text-sm border-primary/20 hover:bg-primary/5 hover:text-primary" onClick={() => {
+                        generateMonthlyPDF(selectedMonthStats.invoices, format(selectedDate, "MMMM yyyy", { locale: es }));
+                        toast.success('Generando PDF...');
+                    }}><FileText className="h-4 w-4" /> PDF</Button>
                 )}
-              </div>
-            </Card>
-          </div>
+                {viewMode === 'year' && yearStats.totalSales > 0 && (
+                    <Button variant="outline" size="sm" className="h-9 gap-2 ml-2 text-sm border-primary/20 hover:bg-primary/5 hover:text-primary" onClick={() => setIsRangeExportOpen(true)}>
+                        <Download className="h-4 w-4" /> Exportar Período
+                    </Button>
+                )}
+            </div>
+            <div className="flex items-center gap-3">
+                {viewMode === 'month' && (
+                    <div className="flex items-center bg-background border rounded-md shadow-sm">
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSelectedDate(prev => subMonths(prev, 1))}><ChevronLeft className="h-4 w-4" /></Button>
+                        <span className="w-36 text-center text-sm font-semibold capitalize">{format(selectedDate, 'MMMM yyyy', { locale: es })}</span>
+                        <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setSelectedDate(prev => addMonths(prev, 1))}><ChevronRight className="h-4 w-4" /></Button>
+                    </div>
+                )}
+                <Select value={String(selectedYear)} onValueChange={(v) => { setSelectedYear(Number(v)); setSelectedDate(new Date(Number(v), selectedDate.getMonth(), 1)); }}>
+                    <SelectTrigger className="w-[100px] h-9 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>{availableYears.map(year => <SelectItem key={year} value={String(year)}>{year}</SelectItem>)}</SelectContent>
+                </Select>
+            </div>
+        </div>
+
+        {viewMode === 'month' ? (
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                {/* 1. KPIs PRINCIPALES */}
+                <div className="col-span-1 md:col-span-2 grid grid-cols-2 gap-6">
+                    <Card className="col-span-2 p-6 bg-gradient-to-br from-emerald-600 to-teal-600 text-white border-none shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4">{commChange.isPositive ? <TrendingUp className="h-32 w-32" /> : <TrendingDown className="h-32 w-32" />}</div>
+                        <div className="relative z-10">
+                            <p className="text-sm font-medium text-white/80 uppercase tracking-wide flex items-center gap-2"><Target className="h-4 w-4" /> Comisión Total</p>
+                            <div className="text-5xl font-bold tracking-tight my-3">${formatCurrency(selectedMonthStats.totalCommission || 0)}</div>
+                            <div className="flex items-center gap-3 text-sm font-medium text-white/90">
+                                <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm backdrop-blur-sm ${commChange.isPositive ? 'bg-white/20' : 'bg-red-500/80 text-white'}`}>
+                                    {commChange.isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                                    {commChange.percent}%
+                                </span>
+                                <span className="opacity-70 text-sm">vs mes anterior</span>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                <Card className="col-span-1 shadow-sm border-t-4 border-t-blue-500">
+                    <CardHeader className="pb-3"><CardTitle className="text-base font-bold text-muted-foreground uppercase flex items-center gap-2"><DollarSign className="h-5 w-5 text-blue-500" /> Ventas Totales</CardTitle></CardHeader>
+                    <CardContent className="space-y-2"><div className="text-3xl font-bold text-foreground">${formatNumber(selectedMonthStats.totalSales || 0)}</div><div className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-semibold ${salesChange.isPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{salesChange.isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{salesChange.percent}%</div></CardContent>
+                </Card>
+
+                <Card className="col-span-1 shadow-sm border-t-4 border-t-orange-500">
+                    <CardHeader className="pb-3"><CardTitle className="text-base font-bold text-muted-foreground uppercase flex items-center gap-2"><Receipt className="h-5 w-5 text-orange-500" /> Facturas</CardTitle></CardHeader>
+                    <CardContent className="space-y-2"><div className="text-3xl font-bold text-foreground">{selectedMonthStats.invoiceCount}</div><div className={`inline-flex items-center gap-1 px-3 py-1 rounded-md text-sm font-semibold ${invoiceChange.isPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{invoiceChange.isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{invoiceChange.percent}%</div></CardContent>
+                </Card>
+
+                {/* 2. RESUMEN DEL MES */}
+                <Card className="col-span-1 md:col-span-4 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 border-l-4 border-l-blue-500 shadow-sm">
+                    <CardHeader className="pb-3"><CardTitle className="text-lg font-bold flex items-center gap-2 text-blue-900 dark:text-blue-100"><Lightbulb className="h-5 w-5 text-blue-500" /> Resumen del Mes</CardTitle></CardHeader>
+                    <CardContent><p className="text-base font-medium text-blue-800 dark:text-blue-200 leading-relaxed text-justify">{smartAnalysis.narrative}</p></CardContent>
+                </Card>
+
+                {/* 3. INSIGHTS DE CLIENTES (BENTO GRID MEJORADO) */}
+                <div className="col-span-1 md:col-span-4">
+                    <h3 className="text-lg font-bold mb-4 flex items-center gap-2 px-1"><Users className="h-5 w-5 text-primary" /> Inteligencia de Clientes</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {/* Cliente Estrella - Mayor Comisión */}
+                        {selectedMonthStats.topCommissionClient ? (
+                            <Card className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 border-amber-100/80 hover:shadow-md transition-all relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Crown className="h-20 w-20 text-amber-600" /></div>
+                                <div className="relative z-10">
+                                    <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center mb-3">
+                                        <Crown className="h-5 w-5 text-amber-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wider mb-1">Cliente Estrella</p>
+                                    <p className="text-lg font-bold text-foreground truncate" title={selectedMonthStats.topCommissionClient.name}>{selectedMonthStats.topCommissionClient.name}</p>
+                                    <p className="text-sm font-semibold text-amber-600 mt-1">+${formatNumber(selectedMonthStats.topCommissionClient.commission)} <span className="text-xs font-normal text-muted-foreground">comisión</span></p>
+                                </div>
+                            </Card>
+                        ) : <div className="p-5 border rounded-xl bg-muted/20 flex items-center justify-center text-muted-foreground text-sm">Sin datos</div>}
+
+                        {/* Mayor Volumen - Más Ventas */}
+                        {selectedMonthStats.topSalesClient ? (
+                            <Card className="p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-100/80 hover:shadow-md transition-all relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ShoppingBag className="h-20 w-20 text-blue-600" /></div>
+                                <div className="relative z-10">
+                                    <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center mb-3">
+                                        <ShoppingBag className="h-5 w-5 text-blue-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wider mb-1">Mayor Volumen</p>
+                                    <p className="text-lg font-bold text-foreground truncate" title={selectedMonthStats.topSalesClient.name}>{selectedMonthStats.topSalesClient.name}</p>
+                                    <p className="text-sm font-semibold text-blue-600 mt-1">${formatNumber(selectedMonthStats.topSalesClient.amount)} <span className="text-xs font-normal text-muted-foreground">ventas</span></p>
+                                </div>
+                            </Card>
+                        ) : <div className="p-5 border rounded-xl bg-muted/20 flex items-center justify-center text-muted-foreground text-sm">Sin datos</div>}
+
+                        {/* Más Frecuente */}
+                        {selectedMonthStats.frequentClient ? (
+                            <Card className="p-5 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border-purple-100/80 hover:shadow-md transition-all relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Repeat className="h-20 w-20 text-purple-600" /></div>
+                                <div className="relative z-10">
+                                    <div className="h-10 w-10 rounded-full bg-purple-100 flex items-center justify-center mb-3">
+                                        <Repeat className="h-5 w-5 text-purple-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-purple-700 dark:text-purple-400 uppercase tracking-wider mb-1">Más Frecuente</p>
+                                    <p className="text-lg font-bold text-foreground truncate" title={selectedMonthStats.frequentClient.name}>{selectedMonthStats.frequentClient.name}</p>
+                                    <p className="text-sm font-semibold text-purple-600 mt-1">{selectedMonthStats.frequentClient.invoices} <span className="text-xs font-normal text-muted-foreground">facturas</span></p>
+                                </div>
+                            </Card>
+                        ) : <div className="p-5 border rounded-xl bg-muted/20 flex items-center justify-center text-muted-foreground text-sm">Sin datos</div>}
+
+                        {/* Ticket Promedio Alto */}
+                        {selectedMonthStats.highestTicketClient ? (
+                            <Card className="p-5 bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/30 dark:to-green-950/30 border-emerald-100/80 hover:shadow-md transition-all relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><Star className="h-20 w-20 text-emerald-600" /></div>
+                                <div className="relative z-10">
+                                    <div className="h-10 w-10 rounded-full bg-emerald-100 flex items-center justify-center mb-3">
+                                        <Star className="h-5 w-5 text-emerald-600" />
+                                    </div>
+                                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider mb-1">Ticket Más Alto</p>
+                                    <p className="text-lg font-bold text-foreground truncate" title={selectedMonthStats.highestTicketClient.name}>{selectedMonthStats.highestTicketClient.name}</p>
+                                    <p className="text-sm font-semibold text-emerald-600 mt-1">${formatNumber(selectedMonthStats.highestTicketClient.amount / selectedMonthStats.highestTicketClient.invoices)} <span className="text-xs font-normal text-muted-foreground">promedio</span></p>
+                                </div>
+                            </Card>
+                        ) : <div className="p-5 border rounded-xl bg-muted/20 flex items-center justify-center text-muted-foreground text-sm">Sin datos</div>}
+                    </div>
+                </div>
+
+                {/* 4. RESUMEN ESTRATÉGICO Y ORIGEN DE INGRESOS */}
+                <Card className="col-span-1 md:col-span-2 border border-border/50">
+                    <CardHeader className="pb-3"><CardTitle className="text-lg font-bold flex items-center gap-2"><Activity className="h-5 w-5 text-primary" /> Resumen Estratégico</CardTitle></CardHeader>
+                    <CardContent className="flex flex-col gap-6 pt-2">
+                        <div className="flex items-center justify-between p-5 bg-white dark:bg-card rounded-xl border border-border shadow-sm hover:border-amber-300 transition-colors">
+                            <div><div className="text-xs text-muted-foreground uppercase font-bold mb-1.5 flex items-center gap-1"><Trophy className="h-4 w-4 text-amber-500" /> Ganador #1</div><div className="font-bold text-primary text-xl truncate max-w-[200px]">{smartAnalysis.winner?.name || "Sin datos"}</div><div className="text-sm text-muted-foreground mt-1">Venta DLS: <span className="font-semibold text-foreground">${formatNumber(smartAnalysis.winner?.sales || 0)}</span></div></div><div className="text-right"><div className="text-xs text-muted-foreground font-medium">Comisión {firstName}</div><div className="font-extrabold text-emerald-600 text-3xl">${formatNumber(smartAnalysis.winner?.commission || 0)}</div></div>
+                        </div>
+                        <div className="flex items-center justify-between p-5 bg-white dark:bg-card rounded-xl border border-border shadow-sm">
+                            <div><div className="text-xs text-muted-foreground uppercase font-bold mb-1.5 flex items-center gap-1"><Badge variant="outline" className="h-5 px-1.5 text-[10px] border-slate-300">#2</Badge> Segundo Lugar</div><div className="font-bold text-foreground text-xl truncate max-w-[200px]">{smartAnalysis.secondPlace?.name || "-"}</div><div className="text-sm text-muted-foreground mt-1">Venta DLS: <span className="font-semibold text-foreground">${formatNumber(smartAnalysis.secondPlace?.sales || 0)}</span></div></div><div className="text-right"><div className="text-xs text-muted-foreground font-medium">Comisión {firstName}</div><div className="font-bold text-slate-600 dark:text-slate-300 text-2xl">${formatNumber(smartAnalysis.secondPlace?.commission || 0)}</div></div>
+                        </div>
+                        {smartAnalysis.maxInvoiceObj && (
+                            <div className="flex items-center justify-between p-5 bg-indigo-50/40 dark:bg-indigo-950/20 rounded-xl border border-indigo-100 dark:border-indigo-900/50 shadow-inner cursor-pointer hover:bg-indigo-100/50 transition-colors group" onClick={handleRecordClick}>
+                                <div><div className="text-xs text-indigo-700 dark:text-indigo-300 uppercase font-bold mb-1.5 flex items-center gap-1"><Crown className="h-4 w-4 text-indigo-600" /> Venta Récord</div><div className="font-bold text-foreground text-2xl">${formatNumber(smartAnalysis.maxInvoiceObj.total_amount || 0)}</div><div className="text-sm font-mono text-indigo-600 dark:text-indigo-400 font-bold group-hover:underline mt-0.5">{smartAnalysis.maxInvoiceObj.ncf}</div></div><div className="text-right"><div className="text-xs text-muted-foreground font-medium">Comisión Generada</div><div className="font-bold text-indigo-700 dark:text-indigo-400 text-2xl">${formatNumber(smartAnalysis.maxInvoiceObj.total_commission || 0)}</div></div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="col-span-1 md:col-span-2 flex flex-col">
+                    <CardHeader className="pb-3 flex flex-row items-center justify-between"><CardTitle className="text-lg font-bold flex items-center gap-2"><PieChart className="h-5 w-5 text-muted-foreground" /> Origen de los ingresos</CardTitle></CardHeader>
+                    <CardContent className="flex-1 space-y-6 pt-2">
+                        {smartAnalysis.ranking.slice(0, 4).map((item, idx) => {
+                             const percentage = ((item.commission / (smartAnalysis.totalComm || 1)) * 100).toFixed(1);
+                             return (
+                                <div key={idx} className="text-sm group">
+                                    <div className="flex justify-between items-end mb-1.5">
+                                        <div className="flex items-center gap-3 max-w-[60%]"><span className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${idx === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</span><span className="font-semibold text-foreground text-base truncate" title={item.name}>{item.name}</span></div>
+                                        <div className="text-right flex flex-col items-end"><span className="font-bold text-emerald-600 text-base">${formatNumber(item.commission)}</span><span className="text-xs text-muted-foreground font-medium">{percentage}%</span></div>
+                                    </div>
+                                    <div className="h-2.5 w-full bg-muted rounded-full overflow-hidden"><div className={`h-full rounded-full transition-all duration-700 ${idx === 0 ? 'bg-primary' : 'bg-slate-400'}`} style={{ width: `${percentage}%` }} /></div>
+                                </div>
+                             );
+                        })}
+                    </CardContent>
+                    <CardFooter className="pt-2 pb-6">
+                        <Dialog>
+                            <DialogTrigger asChild><Button variant="outline" className="w-full text-sm gap-2 border-dashed h-10"><Maximize2 className="h-4 w-4" /> Ver Desglose Completo</Button></DialogTrigger>
+                            <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+                                <DialogHeader><DialogTitle>Desglose Total de Ingresos</DialogTitle><DialogDescription>Correlación detallada entre ventas y comisiones.</DialogDescription></DialogHeader>
+                                <div className="flex-1 overflow-y-auto pr-4 mt-4 max-h-[60vh]">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-muted/50 sticky top-0"><tr className="text-left text-muted-foreground border-b"><th className="pb-3 pl-3 font-medium">Producto</th><th className="pb-3 text-right font-medium">Ventas DLS</th><th className="pb-3 text-right pr-3 font-medium">Comisión {firstName}</th><th className="pb-3 text-right pr-3 font-medium">% Total</th></tr></thead>
+                                        <tbody className="divide-y">
+                                            {smartAnalysis.ranking.map((item, idx) => (
+                                                <tr key={idx} className="hover:bg-muted/30">
+                                                    <td className="py-3 pl-3 font-medium flex items-center gap-2"><Badge variant="outline" className="h-5 w-6 justify-center">{idx + 1}</Badge> {item.name}</td>
+                                                    <td className="py-3 text-right text-muted-foreground">${formatNumber(item.sales)}</td>
+                                                    <td className="py-3 text-right pr-3 font-bold text-emerald-600">${formatCurrency(item.commission)}</td>
+                                                    <td className="py-3 text-right pr-3 text-muted-foreground">{((item.commission / (smartAnalysis.totalComm || 1)) * 100).toFixed(1)}%</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    </CardFooter>
+                </Card>
+
+                {/* 5. ACTIVIDAD DIARIA (MOVIDO AL FINAL) */}
+                <Card className="col-span-1 md:col-span-4 shadow-sm border border-border/60">
+                    <CardHeader className="pb-4 border-b border-border/40">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div><CardTitle className="text-xl font-bold flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Actividad Diaria</CardTitle><CardDescription className="text-sm">Evolución día a día.</CardDescription></div>
+                            {selectedMonthStats.bestDay.commission > 0 && <div className="bg-emerald-50 dark:bg-emerald-950/30 px-4 py-2 rounded-lg border border-emerald-100 dark:border-emerald-900/50 flex items-center gap-2"><Trophy className="h-5 w-5 text-emerald-600" /><p className="text-sm text-emerald-900 dark:text-emerald-100 font-semibold">Mejor día: {format(selectedMonthStats.bestDay.date, "d 'de' MMMM", { locale: es })} (${formatCurrency(selectedMonthStats.bestDay.commission)})</p></div>}
+                        </div>
+                    </CardHeader>
+                    <CardContent className="pt-8 px-6">
+                        <div className="w-full overflow-x-auto pb-4">
+                            <div className="h-[250px] flex items-end gap-2 min-w-[800px] px-2">
+                                {selectedMonthStats.dailyData.map((day, idx) => {
+                                    const heightPercent = selectedMonthStats.maxCommissionDay > 0 ? (day.commission / selectedMonthStats.maxCommissionDay) * 100 : 0;
+                                    const isBest = day.commission === selectedMonthStats.maxCommissionDay && day.commission > 0;
+                                    return (
+                                        <div key={idx} className="flex flex-col items-center group relative h-full justify-end flex-1 min-w-[20px]" onClick={() => handleDayClick(day)}>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <div className={`w-full rounded-t-sm transition-all duration-300 cursor-pointer ${isBest ? 'bg-gradient-to-t from-emerald-500 to-emerald-400' : day.commission > 0 ? 'bg-primary/70 hover:bg-primary' : 'bg-muted h-[2px]'}`} style={{ height: day.commission > 0 ? `${Math.max(heightPercent, 5)}%` : '2px' }} />
+                                                </TooltipTrigger>
+                                                <TooltipContent className="bg-slate-900 text-white border-slate-800 p-3 shadow-xl">
+                                                    <div className="text-xs">
+                                                        <p className="font-bold mb-2 border-b border-slate-700 pb-1">{day.tooltipLabel}</p>
+                                                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                                            <span className="text-slate-400">Ventas:</span><span className="font-mono text-right">${formatNumber(day.sales)}</span>
+                                                            <span className="text-emerald-400 font-semibold">Comisión:</span><span className="font-mono text-right text-emerald-400">${formatNumber(day.commission)}</span>
+                                                            <span className="text-slate-400">Facturas:</span><span className="text-right">{day.count}</span>
+                                                        </div>
+                                                        <p className="mt-2 text-[10px] text-center text-slate-500 italic">Clic para ver detalle</p>
+                                                    </div>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                            <div className="mt-2 text-[10px] font-medium text-muted-foreground">{day.label}</div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        ) : (
+            <div className="space-y-6 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <Card className="p-6 bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4"><CalendarDays className="h-32 w-32" /></div>
+                        <div className="relative z-10">
+                            <p className="text-sm font-medium text-white/80 uppercase tracking-wide flex items-center gap-2"><CalendarDays className="h-4 w-4" /> Comisión Anual {selectedYear}</p>
+                            <div className="text-5xl font-bold tracking-tight my-3">${formatCurrency(yearStats.totalCommission)}</div>
+                            <p className="text-sm text-white/70">Total acumulado en el año</p>
+                        </div>
+                    </Card>
+
+                    <Card className="p-6 bg-gradient-to-br from-blue-600 to-cyan-600 text-white border-none shadow-lg relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-8 opacity-10 transform translate-x-4 -translate-y-4"><Briefcase className="h-32 w-32" /></div>
+                        <div className="relative z-10">
+                            <p className="text-sm font-medium text-white/80 uppercase tracking-wide flex items-center gap-2"><Briefcase className="h-4 w-4" /> Traído a DLS {selectedYear}</p>
+                            <div className="text-5xl font-bold tracking-tight my-3">${formatCurrency(yearStats.totalSales)}</div>
+                            <div className="flex items-center gap-2 text-sm text-white/90">
+                                <span className={`flex items-center gap-1 px-3 py-1 rounded-full text-sm backdrop-blur-sm ${annualSalesGrowth >= 0 ? 'bg-white/20' : 'bg-red-500/40 text-white'}`}>
+                                    {annualSalesGrowth >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                                    {Math.abs(annualSalesGrowth).toFixed(1)}%
+                                </span>
+                                <span className="opacity-70 text-sm">vs año anterior</span>
+                            </div>
+                        </div>
+                    </Card>
+                </div>
+
+                <Card className="shadow-md">
+                    <CardHeader><CardTitle className="text-lg flex items-center gap-2"><BarChart3 className="h-5 w-5 text-primary" /> Rendimiento Mensual</CardTitle><CardDescription>Comparativa mes a mes</CardDescription></CardHeader>
+                    <CardContent>
+                        <div className="h-[300px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={monthlyChartData}>
+                                    <XAxis 
+                                        dataKey="name" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} 
+                                    />
+                                    <YAxis hide />
+                                    <RechartsTooltip
+                                        cursor={{ fill: 'hsl(var(--muted)/0.3)' }}
+                                        contentStyle={{ 
+                                            backgroundColor: 'hsl(var(--card))', 
+                                            border: '1px solid hsl(var(--border))',
+                                            borderRadius: '12px',
+                                        }}
+                                        formatter={(value: number, name: string) => [
+                                            `$${name === 'comision' ? formatCurrency(value) : formatNumber(value)}`,
+                                            name === 'comision' ? 'Comisión' : 'Ventas'
+                                        ]}
+                                        labelFormatter={(label) => `${label} ${selectedYear}`}
+                                    />
+                                    <Bar dataKey="comision" radius={[4, 4, 0, 0]} onClick={(data) => {
+                                        const month = yearStats.monthlyData.find(m => m.shortLabel === data.name);
+                                        if(month) handleMonthClick(month);
+                                    }}>
+                                        {monthlyChartData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.comision > 0 ? "hsl(var(--primary))" : "hsl(var(--muted))"} />
+                                        ))}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="shadow-sm border border-border/60">
+                    <CardHeader className="py-4 border-b bg-muted/20"><CardTitle className="text-sm font-bold flex items-center gap-2"><Activity className="h-4 w-4" /> Detalle Anual</CardTitle></CardHeader>
+                    <div className="h-[400px] w-full overflow-y-auto p-0">
+                        <table className="w-full text-sm">
+                            <thead className="bg-muted/50 sticky top-0"><tr className="text-left text-xs uppercase text-muted-foreground"><th className="px-6 py-3 font-medium">Mes</th><th className="px-6 py-3 font-medium text-right">Ventas para DLS</th><th className="px-6 py-3 font-medium text-right">Comisión {firstName}</th><th className="px-6 py-3 font-medium text-right">Crecimiento</th></tr></thead>
+                            <tbody className="divide-y divide-border/40">
+                                {yearStats.monthlyData.map((month, idx) => {
+                                    if (month.sales === 0 && month.commission === 0) return null;
+                                    const isPositive = month.growth >= 0;
+                                    return (
+                                        <tr key={idx} className="hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => handleMonthClick(month)}>
+                                            <td className="px-6 py-3 font-medium capitalize">{month.label}</td>
+                                            <td className="px-6 py-3 text-right text-muted-foreground">${formatNumber(month.sales)}</td>
+                                            <td className="px-6 py-3 text-right font-bold text-emerald-600">${formatCurrency(month.commission)}</td>
+                                            <td className="px-6 py-3 text-right"><span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${idx === 0 ? 'bg-gray-100 text-gray-500' : isPositive ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{idx === 0 ? '-' : <>{isPositive ? <ArrowUpRight className="h-3 w-3 mr-1" /> : <ArrowDownRight className="h-3 w-3 mr-1" />}{Math.abs(month.growth).toFixed(1)}%</>}</span></td>
+                                        </tr>
+                                    );
+                                })}
+                                {yearStats.totalSales === 0 && <tr><td colSpan={4} className="text-center py-8 text-muted-foreground">No hay actividad registrada este año.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            </div>
         )}
 
-        {/* DLS vs Seller Comparison */}
-        {stats.invoiceCount > 0 && (
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center">
-                <BarChart3 className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">Distribución de Comisiones</h3>
-                <p className="text-xs text-muted-foreground">DLS vs {displayName}</p>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-6">
-              {/* DLS */}
-              <div className="text-center p-5 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-blue-500/20">
-                  <Building2 className="h-7 w-7 text-white" />
+        {/* DIÁLOGOS */}
+        <Dialog open={isDayDialogOpen} onOpenChange={setIsDayDialogOpen}>
+            <DialogContent className="max-w-md flex flex-col p-0 overflow-hidden" style={{ maxHeight: '80vh' }}>
+                <DialogHeader className="px-6 pt-6 pb-2"><DialogTitle>Detalle del {selectedDayDate && format(selectedDayDate, "d 'de' MMMM", { locale: es })}</DialogTitle><DialogDescription>{selectedDayInvoices.length} factura(s) registrada(s).</DialogDescription></DialogHeader>
+                <div className="flex-1 overflow-y-auto px-6 pb-6">
+                    <div className="space-y-4 pt-2">
+                        {selectedDayInvoices.map((inv) => (
+                            <div key={inv.id} className="p-5 border rounded-xl bg-card shadow-sm hover:border-primary/50 transition-colors">
+                                <div className="flex justify-between items-start mb-3"><div className="flex flex-col"><span className="font-mono font-bold text-lg text-foreground">{inv.ncf}</span></div><div className="text-right"><div className="text-xs text-muted-foreground mb-0.5">Comisión:</div><div className="font-bold text-emerald-600 text-xl">${formatCurrency(inv.total_commission || 0)}</div></div></div>
+                                <div className="flex justify-between items-center text-sm border-t border-dashed pt-3 mt-2"><span className="text-muted-foreground">Venta Total:</span><span className="font-semibold text-base">${formatNumber(inv.total_amount || 0)}</span></div>
+                                <div className="mt-4 text-xs bg-muted/50 p-3 rounded-lg text-muted-foreground leading-relaxed"><span className="font-semibold text-foreground/80">Desglose: </span>{renderProductList(inv)}</div>
+                            </div>
+                        ))}
+                    </div>
                 </div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">DLS</p>
-                <p className="text-3xl font-black text-foreground">${formatCurrency(stats.dlsCommission)}</p>
-                <p className="text-xs text-muted-foreground mt-1">75% del total</p>
-              </div>
-              
-              {/* Seller */}
-              <div className="text-center p-5 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mx-auto mb-3 shadow-lg shadow-emerald-500/20">
-                  <UserCircle className="h-7 w-7 text-white" />
-                </div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">{displayName}</p>
-                <p className="text-3xl font-black text-foreground">${formatCurrency(stats.sellerCommission)}</p>
-                <p className="text-xs text-muted-foreground mt-1">25% del total</p>
-              </div>
-            </div>
-          </Card>
-        )}
+            </DialogContent>
+        </Dialog>
 
-        {/* Product Detail Dialog */}
-        <Dialog open={showProductDetail} onOpenChange={setShowProductDetail}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5 text-primary" />
-                Detalle de Productos - {capitalizedMonth}
-              </DialogTitle>
-            </DialogHeader>
-            
-            <div className="space-y-4 mt-4">
-              {stats.productBreakdown.map((product) => (
-                <div key={product.name} className="p-4 rounded-xl border border-border bg-muted/20">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center">
-                        <Package className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-foreground">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">{product.percentage}% comisión</p>
-                      </div>
+        <Dialog open={isMonthDialogOpen} onOpenChange={setIsMonthDialogOpen}>
+            <DialogContent className="max-w-md flex flex-col p-0 overflow-hidden" style={{ maxHeight: '80vh' }}>
+                <DialogHeader className="px-6 pt-6 pb-2"><DialogTitle className="capitalize">Resumen de {selectedMonthDetail?.label}</DialogTitle><DialogDescription>Ventas: ${formatNumber(selectedMonthDetail?.sales || 0)} • Comisiones: ${formatNumber(selectedMonthDetail?.commission || 0)}</DialogDescription></DialogHeader>
+                <div className="flex-1 overflow-y-auto px-6 pb-6">
+                    <div className="space-y-3 pt-2">
+                        <h4 className="text-xs font-bold uppercase text-muted-foreground mb-2">Top Productos del Mes</h4>
+                        {selectedMonthDetail?.productRanking?.slice(0, 3).map((p: any, idx: number) => (
+                            <div key={idx} className="flex justify-between items-center p-4 bg-muted/30 rounded-lg border border-border/50">
+                                <div className="flex items-center gap-3"><Badge variant="secondary" className="h-6 w-6 justify-center p-0 text-xs">{idx + 1}</Badge> <span className="font-medium text-sm">{p.name}</span></div>
+                                <div className="text-right"><div className="font-bold text-emerald-600 text-base">${formatCurrency(p.commission || 0)}</div><div className="text-xs text-muted-foreground">Venta: ${formatNumber(p.sales || 0)}</div></div>
+                            </div>
+                        ))}
                     </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold text-foreground">${formatNumber(product.totalAmount)}</p>
-                      <p className="text-xs text-muted-foreground">vendido</p>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-3 gap-3 pt-3 border-t border-border">
-                    <div className="text-center p-2 rounded-lg bg-background">
-                      <p className="text-xs text-muted-foreground">Total Comisión</p>
-                      <p className="font-bold text-success">${formatCurrency(product.totalCommission)}</p>
-                    </div>
-                    <div className="text-center p-2 rounded-lg bg-background">
-                      <p className="text-xs text-muted-foreground">DLS (75%)</p>
-                      <p className="font-bold text-blue-600">${formatCurrency(product.dlsCommission)}</p>
-                    </div>
-                    <div className="text-center p-2 rounded-lg bg-background">
-                      <p className="text-xs text-muted-foreground">{displayName} (25%)</p>
-                      <p className="font-bold text-emerald-600">${formatCurrency(product.sellerCommission)}</p>
-                    </div>
-                  </div>
                 </div>
-              ))}
-            </div>
-          </DialogContent>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isRangeExportOpen} onOpenChange={setIsRangeExportOpen}>
+            <DialogContent className="sm:max-w-[400px]">
+                <DialogHeader><DialogTitle>Exportar Reporte Personalizado</DialogTitle><DialogDescription>Selecciona el rango de meses.</DialogDescription></DialogHeader>
+                <div className="grid gap-4 py-4"><div className="grid grid-cols-2 gap-4"><div className="space-y-2"><Label>Desde</Label><Select value={rangeStartMonth} onValueChange={setRangeStartMonth}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Hasta</Label><Select value={rangeEndMonth} onValueChange={setRangeEndMonth}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{monthOptions.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}</SelectContent></Select></div></div></div>
+                <div className="flex justify-end gap-2 mt-4"><Button variant="outline" onClick={() => setIsRangeExportOpen(false)}>Cancelar</Button><Button onClick={handleRangeExport} className="gap-2"><FileText className="h-4 w-4" /> Generar PDF</Button></div>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isRecordDialogOpen} onOpenChange={setIsRecordDialogOpen}>
+            <DialogContent className="max-w-md">
+                <DialogHeader><DialogTitle>Detalle de Venta Récord</DialogTitle><DialogDescription>La factura con mayor valor del mes.</DialogDescription></DialogHeader>
+                {recordInvoice && (
+                    <div className="p-5 border rounded-xl bg-card shadow-sm mt-2">
+                        <div className="flex justify-between items-start mb-4"><div className="flex flex-col"><span className="font-mono font-bold text-xl text-foreground">{recordInvoice.ncf}</span></div><div className="text-right"><div className="text-xs text-muted-foreground mb-0.5">Comisión Total</div><div className="font-bold text-emerald-600 text-2xl">${formatCurrency(recordInvoice.total_commission || 0)}</div></div></div>
+                        <div className="flex justify-between items-center text-sm border-t border-dashed pt-4 mt-2"><span className="text-muted-foreground">Venta Total Facturada:</span><span className="font-bold text-lg">${formatNumber(recordInvoice.total_amount || 0)}</span></div>
+                        <div className="mt-4 pt-4 border-t"><h4 className="text-xs font-bold uppercase text-muted-foreground mb-2">Desglose de Productos</h4><div className="space-y-2 text-sm">{renderProductList(recordInvoice)}</div></div>
+                    </div>
+                )}
+            </DialogContent>
         </Dialog>
       </div>
     </TooltipProvider>
