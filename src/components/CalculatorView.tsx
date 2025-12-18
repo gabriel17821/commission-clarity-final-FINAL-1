@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Calculator, FileText, CalendarIcon, Package, Trash2, Save, User, Hash, DollarSign } from "lucide-react";
 import { ProductManager } from "@/components/ProductManager";
 import { ClientSelector } from "@/components/ClientSelector";
@@ -70,66 +70,64 @@ export const CalculatorView = ({
   const isFormValid = totalInvoice > 0 && ncfSuffix.length === 4 && selectedClient;
 
   return (
-    <div className="container max-w-5xl mx-auto py-8 space-y-8 animate-in fade-in duration-500">
+    <div className="container max-w-6xl mx-auto py-8 space-y-8 animate-in fade-in duration-500">
       <SaveSuccessAnimation 
         show={showSaveAnimation} 
         onComplete={() => { setShowSaveAnimation(false); handleReset(); }} 
       />
 
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-2">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">Calculadora</h2>
-          <p className="text-muted-foreground">Gestiona las comisiones y desglose de facturas.</p>
+          <h2 className="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Calculadora</h2>
+          <p className="text-muted-foreground font-medium">Gestiona las comisiones y desglose de facturas.</p>
         </div>
-        <div className="flex items-center gap-3 bg-muted/40 px-4 py-2 rounded-full border">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-            {activeSeller?.name?.charAt(0) || <User size={16} />}
+        <div className="flex items-center gap-3 bg-white dark:bg-slate-900 px-5 py-2.5 rounded-full border shadow-sm">
+          <div className="h-8 w-8 rounded-full gradient-primary flex items-center justify-center text-white font-bold text-xs shadow-md">
+            {activeSeller?.name?.charAt(0) || <User size={14} />}
           </div>
-          <span className="text-sm font-medium">{activeSeller?.name}</span>
+          <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{activeSeller?.name}</span>
         </div>
       </div>
 
-      <Card className="border shadow-sm bg-card">
+      <Card className="border-none shadow-xl bg-white dark:bg-slate-950 rounded-[2rem]">
         <CardContent className="p-8">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
             
-            {/* Columna Izquierda: Entradas (Inputs) */}
+            {/* --- COLUMNA IZQUIERDA: INPUTS --- */}
             <div className="lg:col-span-7 space-y-8">
               
               {/* Bloque 1: Fecha y NCF */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                    <CalendarIcon className="h-3 w-3" /> Fecha Factura
+                  <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                    <CalendarIcon className="h-3 w-3 text-primary" /> Fecha Factura
                   </Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button variant="outline" className={cn(
-                        "w-full justify-start text-left font-medium h-11 px-4",
+                        "w-full justify-start text-left font-bold h-12 rounded-xl border-slate-200 hover:bg-slate-50 transition-all",
                         !invoiceDate && "text-muted-foreground"
                       )}>
-                        {format(invoiceDate, 'dd/MM/yyyy')}
+                        {format(invoiceDate, 'PPP', { locale: es })}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-auto p-0 rounded-xl shadow-xl border-none" align="start">
                       <Calendar mode="single" selected={invoiceDate} onSelect={(d)=>d && setInvoiceDate(d)} locale={es} />
                     </PopoverContent>
                   </Popover>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                    <Hash className="h-3 w-3" /> NCF (Últimos 4)
+                  <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                    <Hash className="h-3 w-3 text-primary" /> NCF (4 Finales)
                   </Label>
-                  <div className="flex h-11 rounded-md border border-input bg-transparent px-3 py-1 shadow-sm ring-offset-background focus-within:ring-1 focus-within:ring-ring">
-                    <div className="flex items-center border-r pr-3 mr-3 select-none">
-                      <span className="text-xs font-mono font-medium text-muted-foreground">B010000</span>
-                    </div>
-                    <input
-                      className="flex h-full w-full rounded-md bg-transparent px-0 py-2 text-sm font-medium placeholder:text-muted-foreground focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-                      placeholder="0000"
-                      value={ncfSuffix}
-                      onChange={e => setNcfSuffix(e.target.value.replace(/\D/g,'').slice(0,4))}
+                  <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 h-12 px-4 focus-within:ring-2 ring-primary/20 transition-all">
+                    <span className="text-xs font-mono font-black text-slate-400 mr-2 border-r pr-3 py-1">B010000</span>
+                    <Input 
+                      value={ncfSuffix} 
+                      onChange={e=>setNcfSuffix(e.target.value.replace(/\D/g,'').slice(0,4))} 
+                      className="border-0 focus-visible:ring-0 font-mono font-bold text-lg h-full bg-transparent p-0 tracking-widest" 
+                      placeholder="0000" 
                     />
                   </div>
                 </div>
@@ -137,8 +135,8 @@ export const CalculatorView = ({
 
               {/* Bloque 2: Cliente */}
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                  <User className="h-3 w-3" /> Cliente
+                <Label className="text-[11px] font-black text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+                  <User className="h-3 w-3 text-primary" /> Cliente
                 </Label>
                 <ClientSelector 
                   clients={clients} 
@@ -148,16 +146,16 @@ export const CalculatorView = ({
                 />
               </div>
 
-              <Separator />
+              <Separator className="bg-slate-100" />
 
-              {/* Bloque 3: Monto Principal (Subtotal) */}
+              {/* Bloque 3: Monto Principal (AQUI ESTA EL CAMBIO DE TIPOGRAFÍA) */}
               <div className="space-y-3">
-                <Label className="text-sm font-medium text-foreground flex items-center justify-between">
-                  <span>Subtotal de la factura</span>
-                  <span className="text-xs font-normal text-muted-foreground">(Antes de impuestos)</span>
+                <Label className="text-sm font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-2"><DollarSign className="h-4 w-4 text-primary"/> Subtotal de la factura</span>
+                  <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-black uppercase">Antes de ITBIS</span>
                 </Label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-muted-foreground/60">$</span>
+                <div className="relative group">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-3xl font-bold text-slate-300 group-focus-within:text-primary transition-colors">$</span>
                   <Input 
                     value={displayValue} 
                     onChange={e=>{
@@ -165,34 +163,33 @@ export const CalculatorView = ({
                       setDisplayValue(f);
                       setTotalInvoice(parseFormattedNumber(f));
                     }}
-                    className="h-16 pl-10 text-3xl font-bold border-input bg-background shadow-sm placeholder:text-muted-foreground/30 focus-visible:ring-1" 
+                    // AQUI: h-16 (altura normal) pero text-4xl (letra grande)
+                    className="h-16 pl-10 text-4xl font-black border-2 border-slate-100 dark:border-slate-800 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all rounded-2xl bg-slate-50/50 tracking-tight" 
                     placeholder="0.00" 
                   />
                 </div>
               </div>
             </div>
 
-            {/* Columna Derecha: Desglose y Acciones */}
-            <div className="lg:col-span-5 flex flex-col h-full">
+            {/* --- COLUMNA DERECHA: DESGLOSE --- */}
+            <div className="lg:col-span-5 flex flex-col h-full bg-slate-50/50 dark:bg-slate-900/20 rounded-[2rem] border border-slate-100 p-6">
+              
               <div className="flex-1 space-y-6">
-                
-                {/* Panel de Productos */}
-                <div className="rounded-xl border bg-muted/20 p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <Package className="h-4 w-4" /> Productos Variables
-                    </h3>
-                    <ProductCatalogDialog 
+                <div className="flex items-center justify-between mb-2">
+                   <h3 className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                      <Package className="h-4 w-4 text-primary" /> Productos
+                   </h3>
+                   <ProductCatalogDialog 
                       products={products} 
                       onUpdateProduct={onUpdateProduct} 
                       onDeleteProduct={onDeleteProduct} 
                       onAddProduct={onAddProduct} 
-                    />
-                  </div>
-                  
-                  {/* Lista de productos sin scroll innecesario */}
-                  <div className="space-y-2">
-                    <ProductManager 
+                   />
+                </div>
+
+                {/* Lista de productos */}
+                <div className="space-y-3">
+                   <ProductManager 
                       products={products} 
                       activeProductIds={activeProductIds} 
                       productAmounts={productAmounts} 
@@ -201,58 +198,58 @@ export const CalculatorView = ({
                       onRemoveProductFromInvoice={id=>setActiveProductIds(v=>v.filter(x=>x!==id))} 
                       onAddProduct={onAddProduct} 
                     />
-                  </div>
                 </div>
 
-                {/* Panel del Resto - Justificado Horizontalmente */}
-                <div className="flex items-center justify-between p-4 rounded-xl border bg-card shadow-sm">
-                  <div className="flex items-center gap-4">
-                    <div className="flex flex-col items-center justify-center h-10 w-12 bg-secondary rounded-md border">
-                      <span className="text-sm font-bold">{restPercentage}%</span>
-                    </div>
+                <Separator className="bg-slate-200" />
+
+                {/* Sección Resto - Estilo Row limpio */}
+                <div className="flex items-center justify-between py-2">
+                  <div className="flex items-center gap-3">
                     <div className="flex flex-col">
-                      <span className="text-xs font-bold uppercase text-muted-foreground tracking-wider">Resto</span>
+                      <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest mb-1">Resto ({restPercentage}%)</span>
                       <EditRestPercentageDialog currentValue={restPercentage} onUpdate={onUpdateRestPercentage} />
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-xl font-bold text-foreground tabular-nums tracking-tight">
+                    <span className="text-lg font-bold text-slate-700 dark:text-slate-200 tabular-nums">
                       ${formatNumber(calculations.restAmount)}
                     </span>
                   </div>
                 </div>
 
-                {/* Resumen Final */}
-                <div className="flex items-end justify-between py-2 px-1">
-                   <div>
-                      <p className="text-xs font-medium text-muted-foreground uppercase">Comisión Total</p>
-                      <p className="text-3xl font-black text-primary tracking-tight tabular-nums">
-                        ${formatCurrency(calculations.totalCommission)}
-                      </p>
+                {/* Caja de Comisión Total */}
+                <div className="bg-white dark:bg-slate-950 rounded-2xl p-5 border border-slate-100 shadow-sm mt-4">
+                   <div className="flex justify-between items-end">
+                      <div>
+                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Comisión Total</p>
+                         <p className="text-3xl font-black text-primary tracking-tight tabular-nums">
+                           ${formatCurrency(calculations.totalCommission)}
+                         </p>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={handleReset} 
+                        className="text-slate-300 hover:text-destructive hover:bg-destructive/10 rounded-full h-8 w-8"
+                      >
+                        <Trash2 size={16} />
+                      </Button>
                    </div>
-                   <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={handleReset} 
-                      className="text-muted-foreground hover:text-destructive h-auto py-1"
-                    >
-                      <Trash2 className="mr-2 h-3.5 w-3.5" /> Limpiar
-                    </Button>
                 </div>
               </div>
 
               {/* Botón de Guardado */}
-              <div className="mt-8 pt-6 border-t">
+              <div className="mt-6">
                 <Button 
                   disabled={!isFormValid}
                   onClick={()=>setShowPreviewDialog(true)}
-                  className="w-full h-12 text-base font-bold shadow-md transition-all gradient-primary"
+                  className="w-full h-14 text-lg font-black shadow-lg shadow-primary/20 transition-all gradient-primary rounded-xl hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <Save className="mr-2 h-4 w-4" /> Revisar y Guardar
+                  <Save className="mr-2 h-5 w-5" /> Revisar y Guardar
                 </Button>
                 {!isFormValid && (
-                  <p className="text-center text-[10px] text-muted-foreground font-medium uppercase mt-3">
-                    Completa todos los campos requeridos
+                  <p className="text-center text-[10px] text-muted-foreground font-bold uppercase mt-3 animate-pulse">
+                    Faltan datos requeridos
                   </p>
                 )}
               </div>
