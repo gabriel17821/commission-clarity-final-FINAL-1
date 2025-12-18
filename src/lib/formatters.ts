@@ -1,57 +1,46 @@
 /**
- * Format a number with thousands separators and two decimal places
+ * Formatea un número con separadores de miles y dos decimales
  */
 export const formatCurrency = (value: number): string => {
-  return value.toLocaleString('en-US', { 
+  return new Intl.NumberFormat('en-US', { 
     minimumFractionDigits: 2, 
     maximumFractionDigits: 2 
-  });
+  }).format(value);
 };
 
 /**
- * Format a number with thousands separators (no decimals)
+ * Formatea un número con separadores de miles (sin decimales obligatorios)
  */
 export const formatNumber = (value: number): string => {
-  return value.toLocaleString('en-US');
+  return new Intl.NumberFormat('en-US').format(value);
 };
 
 /**
- * Format input with thousands separators while typing
+ * Formatea el input del usuario con comas mientras escribe
  */
 export const formatInputNumber = (value: string): string => {
-  // Remove all non-digits
-  const numbers = value.replace(/\D/g, '');
-  if (!numbers) return '';
-  return parseInt(numbers, 10).toLocaleString('en-US');
+  const cleanValue = value.replace(/[^0-9.]/g, '');
+  if (!cleanValue) return '';
+  
+  const parts = cleanValue.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  
+  return parts.length > 1 ? `${parts[0]}.${parts[1].slice(0, 2)}` : parts[0];
 };
 
 /**
- * Parse formatted number back to number
+ * Convierte un string formateado (con comas) a un número real
  */
-export const parseFormattedNumber = (value: string): number => {
-  return parseInt(value.replace(/,/g, ''), 10) || 0;
+export const parseFormattedNumber = (value: string | number): number => {
+  if (typeof value === 'number') return value;
+  return parseFloat(value.replace(/,/g, '')) || 0;
 };
 
-/**
- * Parse a date string safely to avoid timezone issues.
- * Forces noon (12:00) to prevent day shifts when converting between timezones.
- */
 export const parseDateSafe = (dateString: string): Date => {
-  // If it's a date-only string (YYYY-MM-DD), parse as local time at noon
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(year, month - 1, day, 12, 0, 0);
   }
-  // For ISO strings or timestamps, parse and adjust to noon local
   const date = new Date(dateString);
   return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0);
-};
-
-/**
- * Format a date for display in Spanish locale
- */
-export const formatDateSafe = (dateString: string, formatStr: string = "d MMM yyyy"): string => {
-  const date = parseDateSafe(dateString);
-  // This will be handled by date-fns format function
-  return dateString; // placeholder, actual formatting done by date-fns
 };
